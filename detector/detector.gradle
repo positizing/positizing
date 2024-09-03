@@ -1,0 +1,18 @@
+plugins {
+    id 'java-library'
+    id 'groovy'
+}
+dependencies {
+    implementation libs.nlp.core
+    implementation(variantOf(libs.nlp.core) {
+        classifier("models")
+    })
+//    implementation libs.stanford.parser
+    runtimeOnly libs.slf4j
+    testImplementation localGroovy()
+    testImplementation libs.spock
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}

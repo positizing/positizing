@@ -1,24 +1,23 @@
 plugins {
-    id 'groovy'
+    id 'wrapper'
+    id 'com.android.application' version '8.1.0' apply false
+    id 'com.android.library' version '8.1.0' apply false
 }
-repositories {
-    mavenCentral()
-}
-dependencies {
-    implementation 'edu.stanford.nlp:stanford-corenlp:4.5.7'
-    implementation 'edu.stanford.nlp:stanford-corenlp:4.5.7:models'
-    //noinspection VulnerableLibrariesLocal
-    implementation 'edu.stanford.nlp:stanford-parser:3.9.2'
-    runtimeOnly 'org.slf4j:slf4j-simple:2.0.13'
-    testImplementation localGroovy()
-    testImplementation 'org.spockframework:spock-core:2.3-groovy-3.0'
-}
+tasks.register('compileJava')
+tasks.register('testClasses')
 gradle.beforeProject {
     Project p ->
-        p.tasks.withType(Test).configureEach {
-            useJUnitPlatform()
-            jvmArgs('-Xmx1g', '-Xms1g')
+        p.repositories {
+            RepositoryHandler r ->
+                r.mavenCentral()
         }
-
+        p.tasks.withType(Test).configureEach {
+            Test t ->
+                t.useJUnitPlatform()
+                t.jvmArgs('-Xmx1g', '-Xms1g')
+        }
 }
-
+wrapper {
+    gradleVersion = '8.7'
+    distributionType = 'ALL'
+}
