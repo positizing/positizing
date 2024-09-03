@@ -13,8 +13,12 @@ dependencies {
     testImplementation localGroovy()
     testImplementation 'org.spockframework:spock-core:2.3-groovy-3.0'
 }
+gradle.beforeProject {
+    Project p ->
+        p.tasks.withType(Test).configureEach {
+            useJUnitPlatform()
+            jvmArgs('-Xmx1g', '-Xms1g')
+        }
 
-tasks.withType(Test).configureEach {
-    useJUnitPlatform()
-    jvmArgs('-Xmx1g', '-Xms1g')
 }
+

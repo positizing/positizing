@@ -4,9 +4,6 @@ plugins {
 
 evaluationDependsOn ':detector'
 
-File unpackedFiles = file('src/main/res/raw')
-String unpackTask = 'unpackModelManifest'
-
 dependencies {
     implementation project(':detector')
     implementation libs.playn.android
@@ -16,12 +13,12 @@ repositories {
     google()
 }
 android {
-    compileSdkVersion 30
-    buildToolsVersion '30.0.3'
+    compileSdk 35
+    buildToolsVersion = '30.0.3'
     defaultConfig {
         applicationId "net.wti.kukunochi"
-        minSdkVersion 30
-        targetSdkVersion 30
+        minSdkVersion 35
+        targetSdkVersion 35
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
