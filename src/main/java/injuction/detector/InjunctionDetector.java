@@ -26,19 +26,16 @@ public class InjunctionDetector {
     // list of PartsOfSpeech types here: https://surdeanu.cs.arizona.edu//mihai/teaching/ista555-fall13/readings/PennTreebankConstituents.html
     private static final String TYPE_ADVERB = "RB";
     private static final String TYPE_MODAL = "MD";
-    private static final Set<String> INJUNCTION_LIST = new HashSet<>();
-    private static final Set<String> MODAL_SHOULD_LIST = new HashSet<>();
+    private static final Set<String> ADVERB_MATCH_LIST = new HashSet<>();
+    private static final Set<String> MODAL_MATCH_LIST = new HashSet<>();
     static {
-        INJUNCTION_LIST.add("not");
-        INJUNCTION_LIST.add("never");
-        MODAL_SHOULD_LIST.add("should");
+        ADVERB_MATCH_LIST.add("not");
+        ADVERB_MATCH_LIST.add("never");
+        ADVERB_MATCH_LIST.add("n't");
+        ADVERB_MATCH_LIST.add("n’t");
+        MODAL_MATCH_LIST.add("should");
     }
     private final StanfordCoreNLP pipeline;
-/*
-
-
-what ever the fuck you want
-*/
 
     public InjunctionDetector() {
         Properties props = new Properties();
@@ -73,20 +70,18 @@ what ever the fuck you want
                 String pos = token.get(CoreAnnotations.PartOfSpeechAnnotation.class);
                 switch (pos) {
                     case TYPE_ADVERB:
-                        if (INJUNCTION_LIST.contains(token.originalText())) {
+                        if (ADVERB_MATCH_LIST.contains(token.originalText().toLowerCase(Locale.ROOT))) {
                             return true;
                         }
                         break;
                     case TYPE_MODAL:
-                        if (MODAL_SHOULD_LIST.contains(token.originalText())) {
+                        if (MODAL_MATCH_LIST.contains(token.originalText().toLowerCase(Locale.ROOT))) {
                             return true;
                         }
                         break;
 
                 }
-                if (TYPE_ADVERB.equals(pos)) {
-                    // check if adverb is in "bad" list
-                }
+
                 // this is the NER label of the token
                 String ne = token.get(CoreAnnotations.NamedEntityTagAnnotation.class);
 
