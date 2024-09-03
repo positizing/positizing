@@ -13,7 +13,7 @@ pluginManagement {
 rootProject.name = 'positizing'
 
 List<String> modules = [
-        ':nlp'
+        ':detector', ':android'
 ]
 modules.each { m ->
     include m
