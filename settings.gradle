@@ -1,0 +1,46 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+        google()
+    }
+    plugins {
+        id "${quarkusPluginId}" version "${quarkusPluginVersion}"
+        id "io.quarkus.extension" version "${quarkusPluginVersion}"
+    }
+}
+
+rootProject.name = 'positizing'
+
+List<String> modules = [
+        ':nlp'
+]
+modules.each { m ->
+    include m
+    ProjectDescriptor p = project(m)
+    int dash = m.indexOf('-')
+    if (dash == -1) {
+        File namedBuildscript = new File(p.projectDir, "${m - ':'}.gradle")
+        if (namedBuildscript.exists()) {
+            p.buildFileName = namedBuildscript.name
+        }
+    } else {
+        String base = m.substring(1, dash)
+        String type = m.substring(dash + 1)
+        File dir = file("$base/$type")
+        if (dir.exists()) {
+            p.projectDir = dir
+            p.buildFileName = "$base-${type}.gradle"
+        }
+    }
+}
+
+dependencyResolutionManagement {
+    versionCatalogs {
+        libs {
+            // we define all our version information in .toml file and access as `libs.xapi.whatever` in a typesafe manner
+            from(files('gradle/versions.toml'))
+        }
+    }
+}
+
