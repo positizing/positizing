@@ -1,0 +1,46 @@
+plugins {
+    alias(libs.plugins.android.application)
+}
+
+evaluationDependsOn ':detector'
+
+File unpackedFiles = file('src/main/res/raw')
+String unpackTask = 'unpackModelManifest'
+
+dependencies {
+    implementation project(':detector')
+    implementation libs.playn.android
+}
+
+repositories {
+    google()
+}
+android {
+    compileSdkVersion 30
+    buildToolsVersion '30.0.3'
+    defaultConfig {
+        applicationId "net.wti.kukunochi"
+        minSdkVersion 30
+        targetSdkVersion 30
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+//
+//tasks.withType(JavaCompile).configureEach {
+//    Task res ->
+//        res.dependsOn(unpackTask)
+//}
+//afterEvaluate {
+//    tasks.named('mergeDebugResources').configure {
+//        mustRunAfter unpackTask
+//    }
+//}
+
