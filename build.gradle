@@ -1,0 +1,20 @@
+plugins {
+    id 'groovy'
+}
+repositories {
+    mavenCentral()
+}
+dependencies {
+    implementation 'edu.stanford.nlp:stanford-corenlp:4.5.7'
+    implementation 'edu.stanford.nlp:stanford-corenlp:4.5.7:models'
+    //noinspection VulnerableLibrariesLocal
+    implementation 'edu.stanford.nlp:stanford-parser:3.9.2'
+    runtimeOnly 'org.slf4j:slf4j-simple:2.0.13'
+    testImplementation localGroovy()
+    testImplementation 'org.spockframework:spock-core:2.3-groovy-3.0'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    jvmArgs('-Xmx1g', '-Xms1g')
+}

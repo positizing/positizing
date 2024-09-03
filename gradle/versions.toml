@@ -1,0 +1,36 @@
+[versions]
+playn = '2.0.6'
+swt = '4.5.1'
+jbox2d = '2.2.1.1'
+lwjgl = '3.1.2'
+lwjgl2 = '2.9.3'
+robovm = '2.3.18'
+android = '30'
+android-plugin = '7.3.0'
+android-kotlin = '1.5.31'
+j2objc-plugin = '0.7.1'
+spock = '2.3-groovy-4.0'
+junit = '4.13.2'
+quarkus = '3.6.4'
+
+[libraries]
+
+playn-jdk = { module = "io.playn:playn-java-lwjgl", version.ref = "playn" }
+playn-html = { module = "io.playn:playn-html", version.ref = "playn" }
+playn-android = { module = "io.playn:playn-android", version.ref = "playn" }
+playn-robovm = { module = "io.playn:playn-robovm", version.ref = "playn" }
+playn-scene = { module = "io.playn:playn-scene", version.ref = "playn" }
+playn-jbox2d = { module = "io.playn:playn-jbox2d", version.ref = "playn" }
+playn-java-base = { module = "io.playn:playn-java-base", version.ref = "playn" }
+playn-jbox2d-library = { module = "org.jbox2d:jbox2d-library", version.ref = "jbox2d" }
+
+spock = { module = "org.spockframework:spock-core", version.ref = "spock" }
+junit = { module = "junit:junit", version.ref = "junit" }
+
+
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "android-plugin" }
+android-library = { id = "com.android.library", version.ref = "android-plugin" }
+android-kotlin = { id = "org.jetbrains.kotlin.android", version.ref = "android-kotlin" }
+ios-plugin = { id = "net.socialhub.j2objccontrib.j2objcgradle", version.ref = "j2objc-plugin" }
