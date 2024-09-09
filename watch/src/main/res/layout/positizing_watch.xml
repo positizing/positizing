@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.wear.widget.BoxInsetLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                                     xmlns:app="http://schemas.android.com/apk/res-auto"
+                                     xmlns:tools="http://schemas.android.com/tools"
+                                     android:layout_width="match_parent"
+                                     android:layout_height="match_parent"
+                                     android:padding="@dimen/box_inset_layout_padding"
+                                     tools:context="com.positizing.watch.WatchNotificationActivity"
+                                     tools:deviceIds="wear">
+
+    <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="@dimen/inner_frame_layout_padding"
+            app:layout_boxedEdges="all">
+
+        <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+            <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                <ImageButton
+                        android:id="@+id/startButton"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@null"
+                        android:src="@drawable/ok"
+                        android:contentDescription="OK"/>
+
+                <ImageButton
+                        android:id="@+id/stopButton"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@null"
+                        android:src="@drawable/ok"
+                        android:contentDescription="Stop"/>
+
+                <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                                xmlns:tools="http://schemas.android.com/tools"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:paddingLeft="@dimen/activity_horizontal_margin"
+                                android:paddingRight="@dimen/activity_horizontal_margin"
+                                android:paddingTop="@dimen/activity_vertical_margin"
+                                android:paddingBottom="@dimen/activity_vertical_margin"
+                                tools:context=".MainActivity">
+
+                    <Button
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Create Notification"
+                            android:id="@+id/btnCreateNotify"
+                            android:onClick="buttonClicked"
+                            android:layout_alignParentTop="true"
+                            android:layout_alignParentLeft="true"
+                            android:layout_alignParentRight="true"/>
+
+
+
+                    <Button
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Clear All Notification"
+                            android:id="@+id/btnClearNotify"
+                            android:onClick="buttonClicked"
+                            android:layout_below="@+id/btnCreateNotify"
+                            android:layout_alignLeft="@+id/btnCreateNotify"
+                            android:layout_alignRight="@+id/btnCreateNotify"/>
+
+                    <ScrollView android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:layout_alignParentBottom="true"
+                                android:layout_alignRight="@+id/btnListNotify"
+                                android:layout_below="@+id/btnListNotify"
+                                android:layout_alignLeft="@+id/btnListNotify">
+
+                        <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:textAppearance="?android:attr/textAppearanceMedium"
+                                android:text="NotificationListenerService Example"
+                                android:id="@+id/textView"
+                                />
+
+
+                    </ScrollView>
+
+                    <Button
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="List of Notification"
+                            android:id="@+id/btnListNotify"
+                            android:onClick="buttonClicked"
+                            android:layout_below="@+id/btnClearNotify"
+                            android:layout_alignLeft="@+id/btnClearNotify"
+                            android:layout_alignRight="@+id/btnClearNotify"/>
+                </RelativeLayout>
+
+                <TextView
+                        android:id="@+id/textField"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:background="@drawable/mybg"
+                        android:gravity="center_vertical"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:text="  -1  "
+                        android:textAppearance="?android:attr/textAppearanceLarge"/>
+            </LinearLayout>
+
+        </LinearLayout>
+
+
+    </FrameLayout>
+
+</androidx.wear.widget.BoxInsetLayout>

@@ -5,7 +5,7 @@
                                      android:layout_width="match_parent"
                                      android:layout_height="match_parent"
                                      android:padding="@dimen/box_inset_layout_padding"
-                                     tools:context="com.positizing.android.PositizingActivity"
+                                     tools:context="com.positizing.phone.PhonePositizingActivity"
                                      tools:deviceIds="wear">
 
     <FrameLayout
@@ -25,15 +25,23 @@
                     android:orientation="horizontal">
 
                 <ImageButton
-                        android:id="@+id/myButton"
+                        android:id="@+id/startButton"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
                         android:background="@null"
                         android:src="@drawable/ok"
                         android:contentDescription="OK"/>
 
+                <ImageButton
+                        android:id="@+id/stopButton"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@null"
+                        android:src="@drawable/ok"
+                        android:contentDescription="Stop"/>
+
                 <TextView
-                        android:id="@+id/text"
+                        android:id="@+id/textField"
                         android:layout_width="wrap_content"
                         android:layout_height="48dp"
                         android:background="@drawable/mybg"
@@ -44,10 +52,6 @@
                         android:textAppearance="?android:attr/textAppearanceLarge"/>
             </LinearLayout>
 
-            <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/test_text"/>
         </LinearLayout>
 
 
