@@ -16,6 +16,7 @@ nlp-core = '4.5.7'
 stanford-parser = '3.9.2'
 slf4j = '2.0.13'
 wearable = '18.2.0'
+base = '18.5.0'
 androidx-percent = '1.0.0'
 androidx-recycler = '1.3.2'
 
@@ -26,6 +27,7 @@ stanford-parser = { module = "edu.stanford.nlp:stanford-parser", version.ref = "
 
 slf4j = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 
+android-base = { module = "com.google.android.gms:play-services-base", version.ref = "base" }
 android-wearable = { module = "com.google.android.gms:play-services-wearable", version.ref = "wearable" }
 androidx-percent = { module = "androidx.percentlayout:percentlayout", version.ref = "androidx-percent" }
 androidx-recycler = { module = "androidx.recyclerview:recyclerview", version.ref = "androidx-recycler" }
