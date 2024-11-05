@@ -710,17 +710,26 @@ public class InjunctionDetector {
             }
 
             // Extract the complement phrase
-            List<IndexedWord> complementWords = dependencies.getLeaves(complementVerb);
-            complementWords.add(complementVerb);
+            Set<IndexedWord> descendants = dependencies.getSubgraphVertices(complementVerb);
+            descendants.add(complementVerb);
+
+            // Create a set of words to exclude
+            Set<IndexedWord> wordsToExclude = new HashSet<>();
+            wordsToExclude.add(subject2);
+            // Also add "to" if present
+            for (IndexedWord word : dependencies.vertexSet()) {
+                if (word.originalText().equalsIgnoreCase("to")) {
+                    wordsToExclude.add(word);
+                    break;
+                }
+            }
+
+            // Remove duplicates and sort the words according to their positions in the sentence
+            List<IndexedWord> complementWords = new ArrayList<>(descendants);
+            complementWords.sort(Comparator.comparingInt(IndexedWord::index));
 
             // Remove subject2 and "to" from the complementWords
-            complementWords.remove(subject2);
-            complementWords.removeIf(word -> word.originalText().equalsIgnoreCase("to"));
-
-            // Sort the words
-            Set<IndexedWord> uniqueComplementWords = new HashSet<>(complementWords);
-            complementWords = new ArrayList<>(uniqueComplementWords);
-            complementWords.sort(Comparator.comparingInt(IndexedWord::index));
+            complementWords.removeIf(word -> wordsToExclude.contains(word));
 
             // Build the complement phrase
             StringBuilder complementBuilder = new StringBuilder();
@@ -738,7 +747,8 @@ public class InjunctionDetector {
             complement = complement.replaceFirst("\\b" + Pattern.quote(complementVerb.originalText()) + "\\b", adjustedComplementVerb);
 
             // Include additional modifiers or clauses attached to the complement verb
-            String additionalPhrase = extractAdditionalPhrases(dependencies, complementVerb, complementWords);
+            String additionalPhrase = extractAdditionalPhrases(dependencies, complementVerb, complementWords, wordsToExclude);
+
 
             // Reconstruct the transformed sentence
             StringBuilder transformedSentenceBuilder = new StringBuilder();
@@ -773,7 +783,6 @@ public class InjunctionDetector {
         // Return the original sentence if the pattern is not matched
         return sentence;
     }
-
 
     // Add the getPastTense method
     /**
@@ -872,17 +881,21 @@ public class InjunctionDetector {
     /**
      * Extracts additional phrases attached to the complement verb.
      */
-    private String extractAdditionalPhrases(SemanticGraph dependencies, IndexedWord complementVerb, List<IndexedWord> complementWords) {
+    private String extractAdditionalPhrases(SemanticGraph dependencies, IndexedWord complementVerb, List<IndexedWord> complementWords, Set<IndexedWord> wordsToExclude) {
         List<IndexedWord> additionalWords = new ArrayList<>();
 
         for (SemanticGraphEdge edge : dependencies.outgoingEdgeList(complementVerb)) {
             IndexedWord dependent = edge.getDependent();
-            if (!complementWords.contains(dependent)) {
+            if (!complementWords.contains(dependent) && !wordsToExclude.contains(dependent)) {
                 additionalWords.add(dependent);
-                additionalWords.addAll(dependencies.descendants(dependent));
+                // Add descendants of the dependent
+                Set<IndexedWord> descendants = dependencies.getSubgraphVertices(dependent);
+                descendants.removeAll(wordsToExclude);
+                additionalWords.addAll(descendants);
             }
         }
 
+        // Remove duplicates and sort the words according to their positions in the sentence
         Set<IndexedWord> uniqueAdditionalWords = new HashSet<>(additionalWords);
         additionalWords = new ArrayList<>(uniqueAdditionalWords);
         additionalWords.sort(Comparator.comparingInt(IndexedWord::index));
