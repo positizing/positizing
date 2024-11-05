@@ -1,6 +1,4 @@
-package com.positizing.desktop;
-
-import injuction.detector.TaskExecutor;
+package injuction.detector;
 
 /**
  * DesktopTaskExecutor:
