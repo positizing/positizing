@@ -75,6 +75,36 @@ class SentenceTransformerTest extends Specification {
         "He makes me feel on top of the world."           | "I feel on top of the world with him."
     }
 
+    def "transformSentence should correctly transform various sentences with tense and clause handling"() {
+        given:
+        def conditions = new AsyncConditions(1)
+
+        when:
+        detector.transformSentence(testSentence, { transformed ->
+            conditions.evaluate {
+                assert transformed == expectedTransformed
+            }
+        })
+
+        then:
+        conditions.await(300)
+
+        where:
+        testSentence                                      | expectedTransformed
+        // Test Case 1
+        "She encourages him to be confident."             | "He is confident with her."
+        // Test Case 2
+        "They want me to succeed."                        | "I succeed with them."
+        // Test Case 3
+        "She made me feel happy."                         | "I felt happy with her."
+        // Test Case 4
+        "He will make me feel proud."                     | "I will feel proud of him."
+        // Test Case 5
+        "She doesn't make me feel sad."                   | "I don't feel sad with her."
+        // Test Case 6
+        "They make me feel inspired when they perform."   | "I feel inspired with them when they perform."
+    }
+
     def "transformSentence should handle different pronouns correctly"() {
         given:
         String testSentence = "He makes us feel welcome."
