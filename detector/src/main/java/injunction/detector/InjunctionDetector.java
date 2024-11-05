@@ -37,6 +37,7 @@ public class InjunctionDetector {
     private static final Set<String> MODAL_MATCH_LIST = new HashSet<>();
     private static final Set<String> CONJUNCTION_MATCH_LIST = new HashSet<>();
     private static final Set<String> PROFANITY_MATCH_LIST = new HashSet<>();
+    private static final Set<String> REFLEXIVE_PRONOUNS = new HashSet<>();
 
     private static final Map<String, String> SUBJECT_TO_OBJECT_PRONOUN = new HashMap<>();
     private static final Map<String, String> OBJECT_TO_SUBJECT_PRONOUN = new HashMap<>();
@@ -104,6 +105,16 @@ public class InjunctionDetector {
         OBJECT_TO_SUBJECT_PRONOUN.put("her", "she");
         OBJECT_TO_SUBJECT_PRONOUN.put("us", "we");
         OBJECT_TO_SUBJECT_PRONOUN.put("them", "they");
+
+        // Initialize reflexive pronouns
+        REFLEXIVE_PRONOUNS.add("myself");
+        REFLEXIVE_PRONOUNS.add("yourself");
+        REFLEXIVE_PRONOUNS.add("himself");
+        REFLEXIVE_PRONOUNS.add("herself");
+        REFLEXIVE_PRONOUNS.add("itself");
+        REFLEXIVE_PRONOUNS.add("ourselves");
+        REFLEXIVE_PRONOUNS.add("yourselves");
+        REFLEXIVE_PRONOUNS.add("themselves");
 
         // Load profane words from 'profane_words.txt'
         try (InputStream inputStream = InjunctionDetector.class.getClassLoader().getResourceAsStream("profanity/profane_words.txt")) {
@@ -342,6 +353,16 @@ public class InjunctionDetector {
     }
 
     /**
+     * Checks if a word is a reflexive pronoun.
+     *
+     * @param word The word to check.
+     * @return True if the word is a reflexive pronoun; false otherwise.
+     */
+    private boolean isReflexivePronoun(String word) {
+        return REFLEXIVE_PRONOUNS.contains(word.toLowerCase(Locale.ROOT));
+    }
+
+    /**
      * Asynchronously checks if the given message contains profanity.
      *
      * @param message  The message to check.
@@ -536,13 +557,6 @@ public class InjunctionDetector {
         });
     }
 
-    /**
-     * Transforms sentences of the form "Subject makes Object feel [Complement]"
-     * into "NewSubject feel [Complement] with NewObject", keeping pronouns consistent.
-     *
-     * @param sentence The input sentence to transform.
-     * @return The transformed sentence if the pattern is matched; otherwise, returns the original sentence.
-     */
     private String transformSentenceInternal(final String sentence) {
         // Annotate the sentence using Stanford CoreNLP
         Annotation document = new Annotation(sentence);
@@ -564,12 +578,12 @@ public class InjunctionDetector {
         if (rootVerb == null) {
             return sentence;
         }
-        String rootLemma = rootVerb.get(CoreAnnotations.LemmaAnnotation.class);
 
         // Initialize variables to hold grammatical components
-        IndexedWord subject = null;         // The subject of the sentence (nsubj)
-        IndexedWord object = null;          // The object of the verb (dobj)
-        IndexedWord complementVerb = null;  // The complement verb (xcomp or ccomp)
+        IndexedWord subject1 = null;        // The subject of the main verb (e.g., "She")
+        IndexedWord object = null;          // The object of the main verb (e.g., "me")
+        IndexedWord complementVerb = null;  // The complement verb (e.g., "feel", "learn")
+        IndexedWord subject2 = null;        // The subject of the complement verb (e.g., "me")
 
         // Iterate over the dependency edges to find grammatical relations
         for (SemanticGraphEdge edge : dependencies.edgeIterable()) {
@@ -579,7 +593,7 @@ public class InjunctionDetector {
 
             // Find the nominal subject (nsubj) of the main verb
             if (reln.getShortName().equals("nsubj") && governor.equals(rootVerb)) {
-                subject = dependent; // e.g., "She"
+                subject1 = dependent; // e.g., "She"
             }
             // Find the direct object (dobj) of the main verb
             else if (reln.getShortName().equals("dobj") && governor.equals(rootVerb)) {
@@ -587,26 +601,48 @@ public class InjunctionDetector {
             }
             // Find the complement verb (xcomp or ccomp) of the main verb
             else if ((reln.getShortName().equals("xcomp") || reln.getShortName().equals("ccomp")) && governor.equals(rootVerb)) {
-                complementVerb = dependent; // e.g., "feel"
+                complementVerb = dependent; // e.g., "feel", "learn"
             }
         }
 
+        if (complementVerb != null) {
+            // Find the subject of the complement verb
+            for (SemanticGraphEdge edge : dependencies.outgoingEdgeList(complementVerb)) {
+                GrammaticalRelation reln = edge.getRelation();
+                IndexedWord dependent = edge.getDependent();
+
+                if (reln.getShortName().equals("nsubj") || reln.getShortName().equals("nsubj:xsubj")) {
+                    subject2 = dependent; // e.g., "me"
+                    break;
+                }
+            }
+        }
+
+        // If the subject of the complement verb is not found, it may be controlled by the object of the main verb
+        if (subject2 == null && object != null) {
+            subject2 = object;
+        }
+
         // Check if all necessary components are found
-        if (subject != null && object != null && complementVerb != null) {
+        if (subject1 != null && subject2 != null && complementVerb != null) {
             // Swap pronouns to keep consistency
-            // Convert the object pronoun to the new subject pronoun
-            String newSubject = OBJECT_TO_SUBJECT_PRONOUN.getOrDefault(object.originalText().toLowerCase(), object.originalText());
-            // Convert the subject pronoun to the new object pronoun
-            String newObject = SUBJECT_TO_OBJECT_PRONOUN.getOrDefault(subject.originalText().toLowerCase(), subject.originalText());
+            // Convert the subject pronoun of the complement verb to the new subject pronoun
+            String newSubject = OBJECT_TO_SUBJECT_PRONOUN.getOrDefault(subject2.originalText().toLowerCase(), subject2.originalText());
+            // Convert the subject pronoun of the main verb to the new object pronoun
+            String newObject = SUBJECT_TO_OBJECT_PRONOUN.getOrDefault(subject1.originalText().toLowerCase(), subject1.originalText());
 
             // Capitalize the new subject for proper sentence formatting
             newSubject = capitalizeFirstLetter(newSubject);
 
-            // Extract the complement phrase (e.g., "feel happy")
+            // Extract the complement phrase starting from the complement verb
             List<IndexedWord> complementWords = dependencies.getSubgraphVertices(complementVerb).stream()
                     // Sort the words according to their positions in the sentence
-                   .sorted(Comparator.comparingInt(IndexedWord::index)).collect(Collectors.toList());
-            // Sort the words according to their positions in the sentence
+                    .sorted(Comparator.comparingInt(IndexedWord::index)).collect(Collectors.toList());
+            complementWords.add(complementVerb);
+            // Remove duplicates and sort the words according to their positions in the sentence
+            Set<IndexedWord> uniqueComplementWords = new HashSet<>(complementWords);
+            complementWords = new ArrayList<>(uniqueComplementWords);
+            complementWords.sort(Comparator.comparingInt(IndexedWord::index));
 
             // Build the complement phrase by concatenating the words
             StringBuilder complementBuilder = new StringBuilder();
@@ -617,7 +653,7 @@ public class InjunctionDetector {
             String complement = complementBuilder.toString().trim();
 
             // Reconstruct the sentence in the new format
-            // "NewSubject Complement with NewObject."
+            // "NewSubject complement with NewObject."
             String transformedSentence = String.format("%s %s with %s.",
                     newSubject, complement, newObject);
 
