@@ -1,0 +1,2 @@
+We found the dirty words here: https://github.com/zacanger/profane-words/blob/master/words.json
+It uses the WTFPL License, which is very permissive: https://github.com/zacanger/profane-words/blob/master/LICENSE.md
