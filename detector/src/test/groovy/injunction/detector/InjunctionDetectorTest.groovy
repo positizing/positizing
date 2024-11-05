@@ -1,14 +1,16 @@
 package injunction.detector
 
+import injuction.detector.DesktopTaskExecutor
 import injuction.detector.InjunctionDetector
 import spock.lang.Specification
+import spock.lang.Unroll
 
 class InjunctionDetectorTest extends Specification {
 
     InjunctionDetector detector
 
     void setup() {
-        detector = new InjunctionDetector()
+        detector = new InjunctionDetector(new DesktopTaskExecutor())
     }
 
     def "Detector can find simple 'not' phrases"() {
@@ -143,7 +145,7 @@ class InjunctionDetectorTest extends Specification {
         "She won't be able to make it."         || true               || false
         "We are going to succeed."              || false              || false
         // Note: Replace '[profane word]' with an actual profane word from your list if appropriate
-        "This is absolutely bitchin!"           || false              || true
+        "This is absolutely bitchin"              || false              || true
     }
 
     def "Detector does not detect injunctions in phrases with 'but' used positively"(String testText) {
@@ -222,6 +224,7 @@ class InjunctionDetectorTest extends Specification {
         "The project is not only ambitious but also feasible." || "The project is both ambitious and feasible."
     }
 
+    @Unroll
     def "Detector leaves sentences unchanged when no improvement is needed"(String testText) {
         when:
         boolean hasInjunction = detector.isInjuction(testText)
@@ -239,5 +242,59 @@ class InjunctionDetectorTest extends Specification {
                 "The project is ambitious and feasible.",
                 "This is a regular sentence without the pattern."
         ]
+    }
+
+    @Unroll
+    def "Detector identifies sentences with multiple injunctions"(String testText) {
+        expect:
+        detector.isInjuction(testText)
+
+        where:
+        testText << [
+                "I can't do this, but I should try.",
+                "You should not go there, but if you must, be careful.",
+                "They won't come because they don't like crowds.",
+        ]
+    }
+
+    @Unroll
+    def "Detector avoids false positives with substring matches"(String testText) {
+        expect:
+        !detector.isInjuction(testText)
+
+        where:
+        testText << [
+                "We cannotionally agree on this.",
+                "The notorious bandit struck again.",
+                "She is notable in her field.",
+                "He buttered the toast.",
+                "The button is stuck.",
+        ]
+    }
+
+    @Unroll
+    def "Detector correctly identifies profanity in phrases"(String testText, boolean expectedProfanity) {
+        expect:
+        detector.containsProfanity(testText) == expectedProfanity
+
+        where:
+        testText                                  || expectedProfanity
+        "This is absolutely unacceptable."        || false
+        "He used a profane word."                 || false
+        "That was a damn good performance."       || true
+        "She said a bad word."                    || false
+        // Add more phrases with actual profane words from your list
+    }
+    def "Detector transforms 'She makes me feel happy' into 'I feel happy with her'"() {
+        given:
+        String testText = "She makes me feel happy."
+        String expectedTransformedText = "I feel happy with her."
+
+        when:
+        String[] result = new String[1]
+        detector.transformSentence(testText, transformed -> result[0] = transformed)
+
+        then:
+        result[0] == expectedTransformedText
     }
 }
