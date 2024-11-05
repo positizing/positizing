@@ -143,7 +143,7 @@ class InjunctionDetectorTest extends Specification {
         "She won't be able to make it."         || true               || false
         "We are going to succeed."              || false              || false
         // Note: Replace '[profane word]' with an actual profane word from your list if appropriate
-        "This is absolutely bitchin!"    || false              || true
+        "This is absolutely bitchin!"           || false              || true
     }
 
     def "Detector does not detect injunctions in phrases with 'but' used positively"(String testText) {
@@ -191,4 +191,53 @@ class InjunctionDetectorTest extends Specification {
         "They don't like it, but they need it."                    || true
     }
 
+
+    def "Detector can find and improve sentences with 'not only...but also...'"() {
+        given:
+        String testText = "She is not only talented but also hardworking."
+
+        when:
+        boolean hasInjunction = detector.isInjuction(testText)
+        String improvedText = detector.suggestImprovedSentence(testText)
+
+        then:
+        hasInjunction == true
+        improvedText == "She is both talented and hardworking."
+    }
+
+    def "Detector can find and improve multiple sentences"(String testText, String expectedImprovedText) {
+        when:
+        boolean hasInjunction = detector.isInjuction(testText)
+        String improvedText = detector.suggestImprovedSentence(testText)
+
+        then:
+        hasInjunction == true
+        improvedText == expectedImprovedText
+
+        where:
+        testText                                             || expectedImprovedText
+        "She is not only talented but also hardworking."     || "She is both talented and hardworking."
+        "He is not only smart but also kind."                || "He is both smart and kind."
+        "They were not only exhausted but also hungry."      || "They were both exhausted and hungry."
+        "The project is not only ambitious but also feasible." || "The project is both ambitious and feasible."
+    }
+
+    def "Detector leaves sentences unchanged when no improvement is needed"(String testText) {
+        when:
+        boolean hasInjunction = detector.isInjuction(testText)
+        String improvedText = detector.suggestImprovedSentence(testText)
+
+        then:
+        hasInjunction == false
+        improvedText == testText
+
+        where:
+        testText << [
+                "She is both talented and hardworking.",
+                "He is smart and kind.",
+                "They were exhausted and hungry.",
+                "The project is ambitious and feasible.",
+                "This is a regular sentence without the pattern."
+        ]
+    }
 }

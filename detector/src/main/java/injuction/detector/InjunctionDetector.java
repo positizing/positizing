@@ -61,34 +61,28 @@ public class InjunctionDetector {
 
     public InjunctionDetector() {
         Properties props = new Properties();
-        props.put("annotators", "tokenize, pos, lemma");
+        props.put("annotators", "tokenize, ssplit, pos, lemma");
         pipeline = new StanfordCoreNLP(props);
     }
 
     public static void main(String... args) {
         InjunctionDetector detector = new InjunctionDetector();
 
-        List<String> testMessages = Arrays.asList(
-                "I will not finish in time.",
-                "I wanted to go, but it was too late.",
-                "This is a clean sentence.",
-                "I can't do this.",
-                "She tried her best, but failed.",
-                "Nothing can stop us now."
-        );
+        String testSentence = "She is not only talented but also hardworking.";
+        boolean hasInjunction = detector.isInjuction(testSentence);
+        String improvedSentence = detector.suggestImprovedSentence(testSentence);
 
-        for (String message : testMessages) {
-            boolean hasInjunction = detector.isInjuction(message);
-            boolean hasProfanity = detector.containsProfanity(message);
-
-            System.out.println("Message: " + message);
-            System.out.println("Contains Injunction: " + hasInjunction);
-            System.out.println("Contains Profanity: " + hasProfanity);
-            System.out.println("-----------------------------------");
-        }
+        System.out.println("Original Sentence: " + testSentence);
+        System.out.println("Contains Injunction: " + hasInjunction);
+        System.out.println("Improved Sentence: " + improvedSentence);
     }
 
     public boolean isInjuction(final String message) {
+        // First, check for the specific pattern "not only ... but also ..."
+        if (detectNotOnlyButAlsoPattern(message)) {
+            return true;
+        }
+
         Annotation document = new Annotation(message);
         pipeline.annotate(document);
         List<CoreLabel> tokens = document.get(CoreAnnotations.TokensAnnotation.class);
@@ -118,7 +112,30 @@ public class InjunctionDetector {
         return false;
     }
 
+    public String suggestImprovedSentence(final String message) {
+        if (detectNotOnlyButAlsoPattern(message)) {
+            // Rewrite the sentence
+            return rewriteNotOnlyButAlsoSentence(message);
+        }
+        // Return the original message if no improvement is needed
+        return message;
+    }
+
+    private boolean detectNotOnlyButAlsoPattern(String message) {
+        // Simple regex to detect "not only ... but also ..."
+        String pattern = "(?i)not\\s+only\\s+.*\\s+but\\s+also\\s+.*";
+        return message.matches(pattern);
+    }
+
+    private String rewriteNotOnlyButAlsoSentence(String message) {
+        // Replace "not only" with "both" and "but also" with "and"
+        String improved = message.replaceAll("(?i)not\\s+only", "both");
+        improved = improved.replaceAll("(?i)but\\s+also", "and");
+        return improved;
+    }
+
     public boolean containsProfanity(final String message) {
+        // Same as previous implementation
         Annotation document = new Annotation(message);
         pipeline.annotate(document);
         List<CoreLabel> tokens = document.get(CoreAnnotations.TokensAnnotation.class);
