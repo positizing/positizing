@@ -1,32 +1,31 @@
 package com.positizing.watch;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
-import android.content.ComponentName;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.speech.RecognitionListener;
-import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
-import android.util.Log;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.TextView;
-import androidx.annotation.NonNull;
-import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import com.positizing.android.AbstractPositizingActivity;
-import injuction.detector.InjunctionDetector;
+import injunction.detector.InjunctionDetector;
 
-import java.util.ArrayList;
+import java.util.UUID;
 
 /**
  * PositizerActivity:
@@ -111,7 +110,8 @@ public class WatchNotificationActivity extends AbstractPositizingActivity {
 
     @Override
     @SuppressLint("ObsoleteSdkInt")
-    protected void notifyUser() {
+    protected void notifyUser(final String sentence) {
+
         Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
 // Vibrate for 500 milliseconds
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -120,7 +120,27 @@ public class WatchNotificationActivity extends AbstractPositizingActivity {
             //deprecated in API 26
             v.vibrate(500);
         }
+//        b.setSound(Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.notification));
+
+        final AudioAttributes attr = new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build();
         NotificationCompat.Builder b = new NotificationCompat.Builder(getApplicationContext(), CHANNEL_ID);
+        final String name = "positizing_channel";
+        final String channelId = name + UUID.randomUUID().toString();
+
+        final int importance = NotificationManager.IMPORTANCE_DEFAULT;
+        final NotificationChannel channel = new NotificationChannel(channelId, name, importance);
+        channel.enableLights(true);
+        channel.setLightColor(Color.GREEN);
+        channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        // add vibration
+            channel.enableVibration(true);
+            channel.setVibrationPattern(new long[]{ 0L, 300L, 300L, 300L});
+
+        final Uri uri = Uri.parse("android.resource://" + getPackageName() + "/" + com.positizing.R.raw.chime);
+        channel.setSound(uri, attr);
 
     }
 

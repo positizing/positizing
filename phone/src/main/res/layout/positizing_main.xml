@@ -24,34 +24,33 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal">
 
-                <ImageButton
+                <Button
                         android:id="@+id/startButton"
-                        android:layout_width="48dp"
+                        android:layout_width="200dp"
                         android:layout_height="48dp"
-                        android:background="@null"
                         android:src="@drawable/ok"
-                        android:contentDescription="OK"/>
+                        android:text="@string/start"
+                        android:contentDescription="@string/ok"/>
 
-                <ImageButton
+                <Button
                         android:id="@+id/stopButton"
-                        android:layout_width="48dp"
+                        android:layout_width="200dp"
                         android:layout_height="48dp"
-                        android:background="@null"
                         android:src="@drawable/ok"
-                        android:contentDescription="Stop"/>
-
-                <TextView
-                        android:id="@+id/textField"
-                        android:layout_width="wrap_content"
-                        android:layout_height="48dp"
-                        android:background="@drawable/mybg"
-                        android:gravity="center_vertical"
-                        android:paddingStart="4dp"
-                        android:paddingEnd="4dp"
-                        android:text="  -1  "
-                        android:textAppearance="?android:attr/textAppearanceLarge"/>
+                        android:text="@string/stop"
+                        android:contentDescription="@string/stop"
+                        />
             </LinearLayout>
-
+            <androidx.core.widget.NestedScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    >
+                <LinearLayout
+                        android:id="@+id/resultsPanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical" />
+            </androidx.core.widget.NestedScrollView>
         </LinearLayout>
 
 
