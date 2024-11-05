@@ -1,10 +1,12 @@
 package injunction.detector
 
+import groovy.transform.CompileStatic
 import injuction.detector.DesktopTaskExecutor
 import injuction.detector.InjunctionDetector
 import spock.lang.Specification
 import spock.lang.Unroll
 
+@CompileStatic
 class InjunctionDetectorTest extends Specification {
 
     InjunctionDetector detector

@@ -22,12 +22,17 @@ import java.util.stream.Collectors;
 
 /**
  * InjunctionDetector:
- * <p>
- * <p>
+ *
+ * A class that detects injunctions, profane words, and transforms sentences
+ * based on specified linguistic patterns using Stanford CoreNLP.
+ *
+ * All processing is done asynchronously using a TaskExecutor.
+ *
  * Created by James X. Nelson (James@WeTheInter.net) on 02/09/2024 @ 4:03 a.m.
  */
 public class InjunctionDetector {
 
+    // list of PartsOfSpeech types here: https://surdeanu.cs.arizona.edu//mihai/teaching/ista555-fall13/readings/PennTreebankConstituents.html
     private static final String TYPE_ADVERB = "RB";
     private static final String TYPE_MODAL = "MD";
     private static final String TYPE_CONJUNCTION = "CC";
@@ -41,6 +46,16 @@ public class InjunctionDetector {
     private static final Map<String, String> OBJECT_TO_SUBJECT_PRONOUN = new HashMap<>();
 
     static {
+        ADVERB_MATCH_LIST.add("not");
+        ADVERB_MATCH_LIST.add("never");
+        ADVERB_MATCH_LIST.add("n't");
+        ADVERB_MATCH_LIST.add("n’t");
+        MODAL_MATCH_LIST.add("should");
+
+        // Initialize conjunction match list
+        CONJUNCTION_MATCH_LIST.add("but");
+
+        // Initialize pronoun mappings
         SUBJECT_TO_OBJECT_PRONOUN.put("i", "me");
         SUBJECT_TO_OBJECT_PRONOUN.put("you", "you");
         SUBJECT_TO_OBJECT_PRONOUN.put("he", "him");
@@ -54,17 +69,6 @@ public class InjunctionDetector {
         OBJECT_TO_SUBJECT_PRONOUN.put("her", "she");
         OBJECT_TO_SUBJECT_PRONOUN.put("us", "we");
         OBJECT_TO_SUBJECT_PRONOUN.put("them", "they");
-
-        ADVERB_MATCH_LIST.add("not");
-        ADVERB_MATCH_LIST.add("never");
-        ADVERB_MATCH_LIST.add("n't");
-        ADVERB_MATCH_LIST.add("n’t");
-        MODAL_MATCH_LIST.add("should");
-
-        // Initialize conjunction match list
-        CONJUNCTION_MATCH_LIST.add("but");
-
-        // Load profane words from 'profane_words.txt' if needed
 
         // Load profane words from 'profane_words.txt'
         try (InputStream inputStream = InjunctionDetector.class.getClassLoader().getResourceAsStream("profanity/profane_words.txt")) {
@@ -83,39 +87,84 @@ public class InjunctionDetector {
         }
     }
 
-    private final StanfordCoreNLP pipeline;
     private final TaskExecutor taskExecutor;
+    private final StanfordCoreNLP pipeline;
 
+    /**
+     * Constructs an InjunctionDetector with the specified TaskExecutor.
+     *
+     * @param taskExecutor The TaskExecutor to run tasks asynchronously.
+     */
     public InjunctionDetector(TaskExecutor taskExecutor) {
         this.taskExecutor = taskExecutor;
+
         Properties props = new Properties();
         props.put("annotators", "tokenize, ssplit, pos, lemma, parse, depparse");
         pipeline = new StanfordCoreNLP(props);
     }
 
+    /**
+     * Main method for testing purposes.
+     */
     public static void main(String... args) {
-        InjunctionDetector detector = new InjunctionDetector(new DesktopTaskExecutor());
+        TaskExecutor executor = new DesktopTaskExecutor();
+        InjunctionDetector detector = new InjunctionDetector(executor);
 
+        String testSentence = "She makes me feel happy.";
+
+        detector.transformSentence(testSentence, transformed -> {
+            System.out.println("Original Sentence: " + testSentence);
+            System.out.println("Transformed Sentence: " + transformed);
+        });
+
+        // Additional examples
         List<String> testSentences = Arrays.asList(
                 "She is not only talented but also hardworking.",
-                "He is not only smart but also kind.",
-                "They were not only exhausted but also hungry.",
-                "The project is not only ambitious but also feasible.",
-                "This is a regular sentence without the pattern."
+                "I can't believe this happened!",
+                "This is absolutely unacceptable."
         );
 
-        for (String testSentence : testSentences) {
-            boolean hasInjunction = detector.isInjuction(testSentence);
-            String improvedSentence = detector.suggestImprovedSentence(testSentence);
+        for (String sentence : testSentences) {
+            detector.isInjunctionAsync(sentence, result -> {
+                System.out.println("Sentence: " + sentence);
+                System.out.println("Contains Injunction: " + result);
+                System.out.println("-----------------------------------");
+            });
 
-            System.out.println("Original Sentence: " + testSentence);
-            System.out.println("Contains Injunction: " + hasInjunction);
-            System.out.println("Improved Sentence: " + improvedSentence);
-            System.out.println("-----------------------------------");
+            detector.containsProfanityAsync(sentence, result -> {
+                System.out.println("Sentence: " + sentence);
+                System.out.println("Contains Profanity: " + result);
+                System.out.println("-----------------------------------");
+            });
+
+            detector.suggestImprovedSentenceAsync(sentence, improved -> {
+                System.out.println("Original Sentence: " + sentence);
+                System.out.println("Improved Sentence: " + improved);
+                System.out.println("-----------------------------------");
+            });
         }
     }
 
-    public boolean isInjuction(final String message) {
+    /**
+     * Asynchronously checks if the given message contains an injunction.
+     *
+     * @param message  The message to check.
+     * @param callback The callback to receive the result.
+     */
+    public void isInjunctionAsync(final String message, Consumer<Boolean> callback) {
+        taskExecutor.execute(() -> {
+            boolean result = isInjunction(message);
+            callback.accept(result);
+        });
+    }
+
+    /**
+     * Checks if the given message contains an injunction.
+     *
+     * @param message The message to check.
+     * @return True if an injunction is detected; false otherwise.
+     */
+    public boolean isInjunction(final String message) {
         // First, check for the specific pattern "not only ... but also ..."
         if (detectNotOnlyButAlsoPattern(message)) {
             return true;
@@ -150,6 +199,73 @@ public class InjunctionDetector {
         return false;
     }
 
+    /**
+     * Asynchronously checks if the given message contains profanity.
+     *
+     * @param message  The message to check.
+     * @param callback The callback to receive the result.
+     */
+    public void containsProfanityAsync(final String message, Consumer<Boolean> callback) {
+        taskExecutor.execute(() -> {
+            boolean result = containsProfanity(message);
+            callback.accept(result);
+        });
+    }
+
+    /**
+     * Checks if the given message contains profanity.
+     *
+     * @param message The message to check.
+     * @return True if profanity is detected; false otherwise.
+     */
+    public boolean containsProfanity(final String message) {
+        Annotation document = new Annotation(message);
+        pipeline.annotate(document);
+        List<CoreLabel> tokens = document.get(CoreAnnotations.TokensAnnotation.class);
+
+        for (CoreLabel token : tokens) {
+            String lemma = token.get(CoreAnnotations.LemmaAnnotation.class).toLowerCase(Locale.ROOT);
+            if (PROFANITY_MATCH_LIST.contains(lemma)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Asynchronously suggests an improved sentence if applicable.
+     *
+     * @param message  The original message.
+     * @param callback The callback to receive the improved sentence.
+     */
+    public void suggestImprovedSentenceAsync(final String message, Consumer<String> callback) {
+        taskExecutor.execute(() -> {
+            String improved = suggestImprovedSentence(message);
+            callback.accept(improved);
+        });
+    }
+
+    /**
+     * Suggests an improved sentence if it matches specific patterns.
+     *
+     * @param message The original message.
+     * @return The improved sentence if applicable; otherwise, the original message.
+     */
+    public String suggestImprovedSentence(final String message) {
+        if (detectNotOnlyButAlsoPattern(message)) {
+            // Use parse tree to reconstruct the sentence
+            return rewriteNotOnlyButAlsoSentenceUsingParseTree(message);
+        }
+        // Return the original message if no improvement is needed
+        return message;
+    }
+
+    /**
+     * Asynchronously transforms sentences based on specified patterns.
+     *
+     * @param sentence The input sentence to transform.
+     * @param callback The callback to receive the transformed sentence.
+     */
     public void transformSentence(final String sentence, Consumer<String> callback) {
         taskExecutor.execute(() -> {
             String transformed = transformSentenceInternal(sentence);
@@ -182,6 +298,9 @@ public class InjunctionDetector {
 
         // Identify the main verb (root of the dependency tree)
         IndexedWord rootVerb = dependencies.getFirstRoot();
+        if (rootVerb == null) {
+            return sentence;
+        }
         String rootLemma = rootVerb.get(CoreAnnotations.LemmaAnnotation.class);
 
         // Initialize variables to hold grammatical components
@@ -224,6 +343,7 @@ public class InjunctionDetector {
             List<IndexedWord> complementWords = dependencies.getSubgraphVertices(complementVerb).stream()
                     // Sort the words according to their positions in the sentence
                     .sorted(Comparator.comparingInt(IndexedWord::index)).collect(Collectors.toList());
+            // Sort the words according to their positions in the sentence
 
             // Build the complement phrase by concatenating the words
             StringBuilder complementBuilder = new StringBuilder();
@@ -245,20 +365,12 @@ public class InjunctionDetector {
         return sentence;
     }
 
-    public String suggestImprovedSentence(final String message) {
-        if (detectNotOnlyButAlsoPattern(message)) {
-            // Use parse tree to reconstruct the sentence
-            return rewriteNotOnlyButAlsoSentenceUsingParseTree(message);
-        }
-        // Return the original message if no improvement is needed
-        return message;
-    }
-
-    private boolean hasNextWord(List<CoreLabel> tokens, int currentIndex, String expectedNextWord) {
-        return currentIndex + 1 < tokens.size() &&
-                tokens.get(currentIndex + 1).originalText().toLowerCase(Locale.ROOT).equals(expectedNextWord);
-    }
-
+    /**
+     * Detects if the sentence contains the pattern "not only ... but also ...".
+     *
+     * @param message The sentence to check.
+     * @return True if the pattern is detected; false otherwise.
+     */
     private boolean detectNotOnlyButAlsoPattern(String message) {
         // Annotate the message
         Annotation document = new Annotation(message);
@@ -289,6 +401,25 @@ public class InjunctionDetector {
         return foundNotOnly && foundButAlso;
     }
 
+    /**
+     * Helper method to check if the next word matches the expected word.
+     *
+     * @param tokens          The list of tokens.
+     * @param currentIndex    The current index.
+     * @param expectedNextWord The expected next word.
+     * @return True if the next word matches; false otherwise.
+     */
+    private boolean hasNextWord(List<CoreLabel> tokens, int currentIndex, String expectedNextWord) {
+        return currentIndex + 1 < tokens.size() &&
+                tokens.get(currentIndex + 1).originalText().toLowerCase(Locale.ROOT).equals(expectedNextWord);
+    }
+
+    /**
+     * Rewrites the sentence by replacing "not only ... but also ..." with "both ... and ...".
+     *
+     * @param message The original sentence.
+     * @return The rewritten sentence.
+     */
     private String rewriteNotOnlyButAlsoSentenceUsingParseTree(String message) {
         // Annotate the message
         Annotation document = new Annotation(message);
@@ -307,12 +438,13 @@ public class InjunctionDetector {
         int notOnlyIndex = -1;
         int butAlsoIndex = -1;
 
+        // Find indices of "not only" and "but also"
         for (int i = 0; i < tokens.size(); i++) {
             String word = tokens.get(i).originalText().toLowerCase(Locale.ROOT);
-            if (word.equals("not") && i + 1 < tokens.size() && tokens.get(i + 1).originalText().toLowerCase(Locale.ROOT).equals("only")) {
+            if (word.equals("not") && hasNextWord(tokens, i, "only")) {
                 notOnlyIndex = i;
             }
-            if (word.equals("but") && i + 1 < tokens.size() && tokens.get(i + 1).originalText().toLowerCase(Locale.ROOT).equals("also")) {
+            if (word.equals("but") && hasNextWord(tokens, i, "also")) {
                 butAlsoIndex = i;
             }
         }
@@ -348,6 +480,14 @@ public class InjunctionDetector {
         return improvedSentence.toString();
     }
 
+    /**
+     * Extracts a phrase from the tokens between the specified indices.
+     *
+     * @param tokens     The list of tokens.
+     * @param startIndex The start index (inclusive).
+     * @param endIndex   The end index (exclusive).
+     * @return The extracted phrase.
+     */
     private String extractPhrase(List<CoreLabel> tokens, int startIndex, int endIndex) {
         StringBuilder phrase = new StringBuilder();
         for (int i = startIndex; i < endIndex && i < tokens.size(); i++) {
@@ -357,20 +497,12 @@ public class InjunctionDetector {
         return phrase.toString();
     }
 
-    public boolean containsProfanity(final String message) {
-        // Same as previous implementation
-        Annotation document = new Annotation(message);
-        pipeline.annotate(document);
-        List<CoreLabel> tokens = document.get(CoreAnnotations.TokensAnnotation.class);
-
-        for (CoreLabel token : tokens) {
-            String lemma = token.get(CoreAnnotations.LemmaAnnotation.class).toLowerCase(Locale.ROOT);
-            if (PROFANITY_MATCH_LIST.contains(lemma)) {
-                return true;
-            }
-        }
-        return false;
-    }
+    /**
+     * Capitalizes the first letter of a word.
+     *
+     * @param word The word to capitalize.
+     * @return The word with the first letter capitalized.
+     */
     private String capitalizeFirstLetter(String word) {
         if (word == null || word.isEmpty()) {
             return word;
