@@ -29,6 +29,6 @@ class PositizingNotificationReceiver extends BroadcastReceiver {
         } else {
             text.setText(oldText + "\n" + temp);
         }
-        watchNotificationActivity.notifyUser();
+        watchNotificationActivity.notifyUser(temp);
     }
 }
