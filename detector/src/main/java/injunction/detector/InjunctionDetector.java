@@ -11,50 +11,101 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
- * InjunctionDetector:
+ * The {@code InjunctionDetector} class provides methods to analyze and transform sentences
+ * based on specific linguistic patterns using the Stanford CoreNLP library.
  *
- * A class that detects injunctions, profane words, and transforms sentences
- * based on specified linguistic patterns using Stanford CoreNLP.
+ * <p>This class offers functionalities including:
+ * <ul>
+ *   <li>Detecting injunctions (negative expressions) in sentences.</li>
+ *   <li>Detecting profanity in sentences.</li>
+ *   <li>Transforming sentences by restructuring or rephrasing them based on certain patterns.</li>
+ *   <li>Providing suggestions for improving sentences that contain specific conjunctions or patterns.</li>
+ * </ul>
  *
- * It also provides replacement suggestions for sentences containing injunctions and conjunctions.
+ * <p><b>Key Features:</b>
+ * <ul>
+ *   <li>Asynchronous processing using a {@link TaskExecutor} to avoid blocking the main thread.</li>
+ *   <li>Integration with Stanford CoreNLP for natural language processing tasks such as tokenization, lemmatization, part-of-speech tagging, and parsing.</li>
+ * </ul>
  *
- * All processing is done asynchronously using a TaskExecutor.
+ * <h3>Usage Example:</h3>
+ * <pre>{@code
+ * TaskExecutor executor = new TaskExecutor();
+ * InjunctionDetector detector = new InjunctionDetector(executor);
  *
- * Created by James X. Nelson (James@WeTheInter.net) on 02/09/2024 @ 4:03 a.m.
+ * String sentence = "She doesn't make me feel sad.";
+ * detector.transformSentence(sentence, transformedSentence -> {
+ *     System.out.println("Transformed Sentence: " + transformedSentence);
+ * });
+ * }</pre>
+ *
+ * <p>This would output:
+ * <pre>
+ * Transformed Sentence: I don't feel sad with her.
+ * </pre>
+ *
+ * <p>Note: All methods that perform analysis or transformations asynchronously accept a {@code Consumer} callback to handle the results.
+ *
+ * <p><b>Author:</b> James X. Nelson (James@WeTheInter.net)
+ * <br><b>Created:</b> 02/09/2024 @ 4:03 a.m.
  */
 public class InjunctionDetector {
 
-    // list of PartsOfSpeech types here: https://surdeanu.cs.arizona.edu//mihai/teaching/ista555-fall13/readings/PennTreebankConstituents.html
+    // List of Parts of Speech (POS) tags can be found here:
+    // https://surdeanu.cs.arizona.edu/mihai/teaching/ista555-fall13/readings/PennTreebankConstituents.html
 
-    private static final String TYPE_ADVERB = "RB";
-    private static final String TYPE_MODAL = "MD";
-    private static final String TYPE_CONJUNCTION = "CC";
+    /** Part-of-speech tag for adverbs (e.g., "not", "never"). */
+    private static final String POS_ADVERB = "RB";
 
-    private static final Set<String> ADVERB_MATCH_LIST = new HashSet<>();
-    private static final Set<String> MODAL_MATCH_LIST = new HashSet<>();
-    private static final Set<String> CONJUNCTION_MATCH_LIST = new HashSet<>();
-    private static final Set<String> PROFANITY_MATCH_LIST = new HashSet<>();
+    /** Part-of-speech tag for modal verbs (e.g., "should", "could"). */
+    private static final String POS_MODAL = "MD";
+
+    /** Part-of-speech tag for coordinating conjunctions (e.g., "but", "and"). */
+    private static final String POS_CONJUNCTION = "CC";
+
+    /** Set of adverbs that match our criteria, such as negative adverbs. */
+    private static final Set<String> ADVERB_MATCH_SET = new HashSet<>();
+
+    /** Set of modal verbs that match our criteria. */
+    private static final Set<String> MODAL_MATCH_SET = new HashSet<>();
+
+    /** Set of conjunctions that match our criteria. */
+    private static final Set<String> CONJUNCTION_MATCH_SET = new HashSet<>();
+
+    /** Set of profane words to detect in sentences. */
+    private static final Set<String> PROFANITY_WORD_SET = new HashSet<>();
+
+    /** Set of reflexive pronouns (e.g., "myself", "yourself"). */
     private static final Set<String> REFLEXIVE_PRONOUNS = new HashSet<>();
 
+    /** Map from subject pronouns to object pronouns (e.g., "I" -> "me"). */
     private static final Map<String, String> SUBJECT_TO_OBJECT_PRONOUN = new HashMap<>();
+
+    /** Map from object pronouns to subject pronouns (e.g., "me" -> "I"). */
     private static final Map<String, String> OBJECT_TO_SUBJECT_PRONOUN = new HashMap<>();
-    // Add mappings for irregular verbs
+
+    /** Map of irregular verbs from base form to past tense. */
     private static final Map<String, String> IRREGULAR_PAST_TENSE_VERBS = new HashMap<>();
+
+    /** Map of irregular verbs from base form to third person singular present tense. */
     private static final Map<String, String> IRREGULAR_PRESENT_TENSE_VERBS = new HashMap<>();
 
-
+    /** Map of negations to their affirmative forms (e.g., "can't" -> "can"). */
     private static final Map<String, String> NEGATION_MAP = new HashMap<>();
+
+    /** Map of contractions to their expanded forms (e.g., "can't" -> "cannot"). */
     private static final Map<String, String> CONTRACTION_MAP = new HashMap<>();
+
+    /** Set of negative adverbs (e.g., "not", "never"). */
     private static final Set<String> NEGATIVE_ADVERBS = new HashSet<>();
 
-    // Precompiled pattern to detect sentence-ending punctuation
+    /** Precompiled pattern to detect sentence-ending punctuation. */
     private static final Pattern SENTENCE_ENDING_PUNCTUATION_PATTERN = Pattern.compile("[.!?]$");
 
     static {
-        // Initialize negation maps
+        // Initialize negation mappings (e.g., "can't" -> "can").
         NEGATION_MAP.put("can't", "can");
         NEGATION_MAP.put("cannot", "can");
         NEGATION_MAP.put("don't", "do");
@@ -73,7 +124,7 @@ public class InjunctionDetector {
         NEGATION_MAP.put("hadn't", "had");
         NEGATION_MAP.put("n't", ""); // For cases like "couldn't" ➔ "could"
 
-        // Map contractions to full forms
+        // Map contractions to their full forms (e.g., "can't" -> "cannot").
         CONTRACTION_MAP.put("can't", "cannot");
         CONTRACTION_MAP.put("won't", "will not");
         CONTRACTION_MAP.put("n't", " not");
@@ -83,68 +134,21 @@ public class InjunctionDetector {
         CONTRACTION_MAP.put("'ll", " will");
         CONTRACTION_MAP.put("'m", " am");
 
-        // Initialize irregular past tense verbs
-        IRREGULAR_PAST_TENSE_VERBS.put("be", "was");
-        IRREGULAR_PAST_TENSE_VERBS.put("begin", "began");
-        IRREGULAR_PAST_TENSE_VERBS.put("break", "broke");
-        IRREGULAR_PAST_TENSE_VERBS.put("bring", "brought");
-        IRREGULAR_PAST_TENSE_VERBS.put("build", "built");
-        IRREGULAR_PAST_TENSE_VERBS.put("buy", "bought");
-        IRREGULAR_PAST_TENSE_VERBS.put("catch", "caught");
-        IRREGULAR_PAST_TENSE_VERBS.put("choose", "chose");
-        IRREGULAR_PAST_TENSE_VERBS.put("come", "came");
-        IRREGULAR_PAST_TENSE_VERBS.put("do", "did");
-        IRREGULAR_PAST_TENSE_VERBS.put("feel", "felt");
-        IRREGULAR_PAST_TENSE_VERBS.put("find", "found");
-        IRREGULAR_PAST_TENSE_VERBS.put("get", "got");
-        IRREGULAR_PAST_TENSE_VERBS.put("go", "went");
-        IRREGULAR_PAST_TENSE_VERBS.put("have", "had");
-        IRREGULAR_PAST_TENSE_VERBS.put("hear", "heard");
-        IRREGULAR_PAST_TENSE_VERBS.put("keep", "kept");
-        IRREGULAR_PAST_TENSE_VERBS.put("know", "knew");
-        IRREGULAR_PAST_TENSE_VERBS.put("leave", "left");
-        IRREGULAR_PAST_TENSE_VERBS.put("make", "made");
-        IRREGULAR_PAST_TENSE_VERBS.put("say", "said");
-        IRREGULAR_PAST_TENSE_VERBS.put("see", "saw");
-        IRREGULAR_PAST_TENSE_VERBS.put("take", "took");
-        IRREGULAR_PAST_TENSE_VERBS.put("teach", "taught");
-        IRREGULAR_PAST_TENSE_VERBS.put("think", "thought");
-        IRREGULAR_PAST_TENSE_VERBS.put("write", "wrote");
-
-        // Initialize irregular present tense verbs for third person singular
-        IRREGULAR_PRESENT_TENSE_VERBS.put("be", "is");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("have", "has");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("do", "does");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("go", "goes");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("say", "says");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("make", "makes");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("know", "knows");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("think", "thinks");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("take", "takes");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("see", "sees");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("come", "comes");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("get", "gets");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("feel", "feels");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("leave", "leaves");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("give", "gives");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("find", "finds");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("tell", "tells");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("become", "becomes");
-        IRREGULAR_PRESENT_TENSE_VERBS.put("show", "shows");
-
-        // Negative adverbs
+        // Initialize negative adverbs.
         NEGATIVE_ADVERBS.add("not");
         NEGATIVE_ADVERBS.add("never");
         NEGATIVE_ADVERBS.add("no");
 
-        ADVERB_MATCH_LIST.addAll(NEGATIVE_ADVERBS);
+        // Add negative adverbs to the adverb match set.
+        ADVERB_MATCH_SET.addAll(NEGATIVE_ADVERBS);
 
-        MODAL_MATCH_LIST.add("should");
+        // Initialize modal verbs.
+        MODAL_MATCH_SET.add("should");
 
-        // Initialize conjunction match list
-        CONJUNCTION_MATCH_LIST.add("but");
+        // Initialize conjunctions.
+        CONJUNCTION_MATCH_SET.add("but");
 
-        // Initialize pronoun mappings
+        // Initialize pronoun mappings.
         SUBJECT_TO_OBJECT_PRONOUN.put("i", "me");
         SUBJECT_TO_OBJECT_PRONOUN.put("you", "you");
         SUBJECT_TO_OBJECT_PRONOUN.put("he", "him");
@@ -159,7 +163,7 @@ public class InjunctionDetector {
         OBJECT_TO_SUBJECT_PRONOUN.put("us", "we");
         OBJECT_TO_SUBJECT_PRONOUN.put("them", "they");
 
-        // Initialize reflexive pronouns
+        // Initialize reflexive pronouns.
         REFLEXIVE_PRONOUNS.add("myself");
         REFLEXIVE_PRONOUNS.add("yourself");
         REFLEXIVE_PRONOUNS.add("himself");
@@ -169,7 +173,7 @@ public class InjunctionDetector {
         REFLEXIVE_PRONOUNS.add("yourselves");
         REFLEXIVE_PRONOUNS.add("themselves");
 
-        // Initialize irregular past tense verbs
+        // Initialize irregular past tense verbs.
         IRREGULAR_PAST_TENSE_VERBS.put("be", "was");
         IRREGULAR_PAST_TENSE_VERBS.put("begin", "began");
         IRREGULAR_PAST_TENSE_VERBS.put("break", "broke");
@@ -197,7 +201,7 @@ public class InjunctionDetector {
         IRREGULAR_PAST_TENSE_VERBS.put("think", "thought");
         IRREGULAR_PAST_TENSE_VERBS.put("write", "wrote");
 
-        // Initialize irregular present tense verbs for third person singular
+        // Initialize irregular present tense verbs for third person singular.
         IRREGULAR_PRESENT_TENSE_VERBS.put("be", "is");
         IRREGULAR_PRESENT_TENSE_VERBS.put("have", "has");
         IRREGULAR_PRESENT_TENSE_VERBS.put("do", "does");
@@ -218,13 +222,13 @@ public class InjunctionDetector {
         IRREGULAR_PRESENT_TENSE_VERBS.put("become", "becomes");
         IRREGULAR_PRESENT_TENSE_VERBS.put("show", "shows");
 
-        // Load profane words from 'profane_words.txt'
+        // Load profane words from 'profane_words.txt'.
         try (InputStream inputStream = InjunctionDetector.class.getClassLoader().getResourceAsStream("profanity/profane_words.txt")) {
             if (inputStream != null) {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
-                        PROFANITY_MATCH_LIST.add(line.trim().toLowerCase(Locale.ROOT));
+                        PROFANITY_WORD_SET.add(line.trim().toLowerCase(Locale.ROOT));
                     }
                 }
             } else {
@@ -235,18 +239,21 @@ public class InjunctionDetector {
         }
     }
 
+    /** Executor for running tasks asynchronously. */
     private final TaskExecutor taskExecutor;
+
+    /** Stanford CoreNLP pipeline for text annotation. */
     private final StanfordCoreNLP pipeline;
 
     /**
-     * Constructs an InjunctionDetector with the specified TaskExecutor.
+     * Constructs an {@code InjunctionDetector} with the specified {@link TaskExecutor}.
      *
-     * @param taskExecutor The TaskExecutor to run tasks asynchronously.
+     * @param taskExecutor The {@link TaskExecutor} to run tasks asynchronously.
      */
     public InjunctionDetector(TaskExecutor taskExecutor) {
         this.taskExecutor = taskExecutor;
 
-        // Configure the Stanford CoreNLP pipeline with the desired annotators
+        // Configure the Stanford CoreNLP pipeline with the desired annotators.
         Properties props = new Properties();
 
         // The 'annotators' property specifies the sequence of annotators to be applied to the text.
@@ -361,8 +368,18 @@ public class InjunctionDetector {
         return SENTENCE_ENDING_PUNCTUATION_PATTERN.matcher(sentence).find();
     }
 
+
     /**
      * Suggests an improved sentence if it matches specific patterns.
+     *
+     * <p>Currently, this method focuses on sentences containing the "not only ... but also ..." pattern,
+     * and rewrites them using "both ... and ..." for a more concise expression.
+     *
+     * <p><b>Example:</b>
+     * <pre>
+     * Original: "She is not only smart but also kind."
+     * Suggested: "She is both smart and kind."
+     * </pre>
      *
      * @param message The original message.
      * @return The improved sentence if applicable; otherwise, the original message.
@@ -398,11 +415,17 @@ public class InjunctionDetector {
     /**
      * Checks if the given message contains an injunction.
      *
-     * This method performs a synchronous analysis of the input message to determine
-     * if it contains any injunctions based on predefined patterns and linguistic features.
+     * <p>An injunction is detected if the message contains negations, negative adverbs,
+     * specific modal verbs, or certain conjunctions.
+     *
+     * <p><b>Example:</b>
+     * <pre>
+     * Message: "You shouldn't do that."
+     * Returns: true
+     * </pre>
      *
      * @param message The message to analyze.
-     * @return True if an injunction is detected; false otherwise.
+     * @return {@code true} if an injunction is detected; {@code false} otherwise.
      */
     public boolean isInjunction(final String message) {
         // First, check for the specific pattern "not only ... but also ..."
@@ -416,7 +439,7 @@ public class InjunctionDetector {
         List<CoreLabel> tokens = document.get(CoreAnnotations.TokensAnnotation.class);
 
         for (CoreLabel token : tokens) {
-            String pos = token.get(CoreAnnotations.PartOfSpeechAnnotation.class);
+            String posTag = token.get(CoreAnnotations.PartOfSpeechAnnotation.class);
             String word = token.originalText().toLowerCase(Locale.ROOT);
             String lemma = token.get(CoreAnnotations.LemmaAnnotation.class).toLowerCase(Locale.ROOT);
 
@@ -430,22 +453,22 @@ public class InjunctionDetector {
                 return true;
             }
 
-            switch (pos) {
-                case TYPE_ADVERB:
-                    // Check if the adverb matches any in the ADVERB_MATCH_LIST
-                    if (ADVERB_MATCH_LIST.contains(word) || ADVERB_MATCH_LIST.contains(lemma)) {
+            switch (posTag) {
+                case POS_ADVERB:
+                    // Check if the adverb matches any in the ADVERB_MATCH_SET
+                    if (ADVERB_MATCH_SET.contains(word) || ADVERB_MATCH_SET.contains(lemma)) {
                         return true;
                     }
                     break;
-                case TYPE_MODAL:
-                    // Check if the modal verb matches any in the MODAL_MATCH_LIST
-                    if (MODAL_MATCH_LIST.contains(word) || MODAL_MATCH_LIST.contains(lemma)) {
+                case POS_MODAL:
+                    // Check if the modal verb matches any in the MODAL_MATCH_SET
+                    if (MODAL_MATCH_SET.contains(word) || MODAL_MATCH_SET.contains(lemma)) {
                         return true;
                     }
                     break;
-                case TYPE_CONJUNCTION:
-                    // Check if the conjunction matches any in the CONJUNCTION_MATCH_LIST
-                    if (CONJUNCTION_MATCH_LIST.contains(word) || CONJUNCTION_MATCH_LIST.contains(lemma)) {
+                case POS_CONJUNCTION:
+                    // Check if the conjunction matches any in the CONJUNCTION_MATCH_SET
+                    if (CONJUNCTION_MATCH_SET.contains(word) || CONJUNCTION_MATCH_SET.contains(lemma)) {
                         return true;
                     }
                     break;
@@ -467,11 +490,21 @@ public class InjunctionDetector {
         });
     }
 
+
     /**
      * Checks if the given message contains profanity.
      *
+     * <p>This method analyzes the lemmatized tokens of the message and compares them
+     * against a predefined set of profane words.
+     *
+     * <p><b>Example:</b>
+     * <pre>
+     * Message: "That was a damn mistake."
+     * Returns: true
+     * </pre>
+     *
      * @param message The message to check.
-     * @return True if profanity is detected; false otherwise.
+     * @return {@code true} if profanity is detected; {@code false} otherwise.
      */
     public boolean containsProfanity(final String message) {
         Annotation document = new Annotation(message);
@@ -480,7 +513,7 @@ public class InjunctionDetector {
 
         for (CoreLabel token : tokens) {
             String lemma = token.get(CoreAnnotations.LemmaAnnotation.class).toLowerCase(Locale.ROOT);
-            if (PROFANITY_MATCH_LIST.contains(lemma)) {
+            if (PROFANITY_WORD_SET.contains(lemma)) {
                 return true;
             }
         }
@@ -607,7 +640,7 @@ public class InjunctionDetector {
                 String word = token.originalText();
                 String lowerWord = word.toLowerCase(Locale.ROOT);
 
-                if (CONJUNCTION_MATCH_LIST.contains(lowerWord)) {
+                if (CONJUNCTION_MATCH_SET.contains(lowerWord)) {
                     // Replace "but" with "and"
                     sentenceBuilder.append("and");
                     conjunctionFound = true;
@@ -636,12 +669,14 @@ public class InjunctionDetector {
         }
     }
 
-
     /**
      * Transforms a sentence based on specific linguistic patterns.
      *
-     * @param sentence  The original sentence.
-     * @param callback  The callback function to handle the transformed sentence.
+     * <p>This method is the asynchronous counterpart to {@code transformSentenceInternal},
+     * allowing the transformation to be executed without blocking the main thread.
+     *
+     * @param sentence The original sentence.
+     * @param callback A {@link Consumer} to handle the transformed sentence.
      */
     public void transformSentence(String sentence, Consumer<String> callback) {
         taskExecutor.execute(() -> {
@@ -657,116 +692,116 @@ public class InjunctionDetector {
      * @return The transformed sentence.
      */
     private String transformSentenceInternal(final String sentence) {
-        // Annotate the sentence using Stanford CoreNLP
+        // Annotate the sentence using Stanford CoreNLP.
         Annotation document = new Annotation(sentence);
         pipeline.annotate(document);
 
-        // Get the list of sentences (assuming the input is a single sentence)
+        // Get the list of sentences (assuming the input is a single sentence).
         List<CoreMap> sentences = document.get(CoreAnnotations.SentencesAnnotation.class);
         if (sentences.isEmpty()) {
-            return sentence; // Return the original sentence if no sentences are found
+            return sentence; // Return the original sentence if no sentences are found.
         }
 
         CoreMap cmSentence = sentences.get(0);
 
-        // Obtain the dependency parse of the sentence
+        // Obtain the dependency parse of the sentence.
         SemanticGraph dependencies = cmSentence.get(SemanticGraphCoreAnnotations.EnhancedPlusPlusDependenciesAnnotation.class);
 
-        // Identify the main verb (root of the dependency tree)
-        IndexedWord rootVerb = dependencies.getFirstRoot();
-        if (rootVerb == null) {
+        // Identify the main verb (root of the dependency tree).
+        IndexedWord mainVerb = dependencies.getFirstRoot();
+        if (mainVerb == null) {
             return sentence;
         }
 
-        // Get the POS tag of the main verb
-        String mainVerbPOS = rootVerb.get(CoreAnnotations.PartOfSpeechAnnotation.class);
-        String mainVerbLemma = rootVerb.get(CoreAnnotations.LemmaAnnotation.class);
+        // Get the POS tag and lemma of the main verb.
+        String mainVerbPOS = mainVerb.get(CoreAnnotations.PartOfSpeechAnnotation.class);
+        String mainVerbLemma = mainVerb.get(CoreAnnotations.LemmaAnnotation.class);
 
-        // Initialize variables to hold grammatical components
-        IndexedWord subject1 = null;        // The subject of the main verb
-        IndexedWord object = null;          // The object of the main verb
-        IndexedWord complementVerb = null;  // The complement verb
-        IndexedWord subject2 = null;        // The subject of the complement verb
-        String modal = "";                  // Modal verb (e.g., "will")
-        boolean isNegated = false;          // Whether the main verb is negated
-        boolean complementIsInfinitive = false; // Whether the complement verb is an infinitive
+        // Initialize variables to hold grammatical components.
+        IndexedWord mainVerbSubject = null;          // The subject of the main verb.
+        IndexedWord mainVerbObject = null;           // The object of the main verb.
+        IndexedWord complementVerb = null;           // The complement verb (e.g., "feel" in "make me feel").
+        IndexedWord complementVerbSubject = null;    // The subject of the complement verb.
+        String modalVerb = "";                       // Modal verb associated with the main verb (e.g., "will").
+        boolean isMainVerbNegated = false;           // Whether the main verb is negated.
+        boolean isComplementVerbInfinitive = false;  // Whether the complement verb is an infinitive.
 
-        // Iterate over the dependency edges to find grammatical relations
+        // Iterate over the dependency edges to find grammatical relations.
         for (SemanticGraphEdge edge : dependencies.edgeIterable()) {
             GrammaticalRelation reln = edge.getRelation();
             IndexedWord governor = edge.getGovernor();
             IndexedWord dependent = edge.getDependent();
 
-            // Find the nominal subject (nsubj) of the main verb
-            if (reln.getShortName().equals("nsubj") && governor.equals(rootVerb)) {
-                subject1 = dependent;
+            // Find the nominal subject (nsubj) of the main verb.
+            if (reln.getShortName().equals("nsubj") && governor.equals(mainVerb)) {
+                mainVerbSubject = dependent;
             }
-            // Find the object (dobj or iobj) of the main verb
-            else if ((reln.getShortName().equals("dobj") || reln.getShortName().equals("iobj")) && governor.equals(rootVerb)) {
-                object = dependent;
+            // Find the object (dobj or iobj) of the main verb.
+            else if ((reln.getShortName().equals("dobj") || reln.getShortName().equals("iobj")) && governor.equals(mainVerb)) {
+                mainVerbObject = dependent;
             }
-            // Find the complement verb (xcomp or ccomp) of the main verb
-            else if ((reln.getShortName().equals("xcomp") || reln.getShortName().equals("ccomp")) && governor.equals(rootVerb)) {
+            // Find the complement verb (xcomp or ccomp) of the main verb.
+            else if ((reln.getShortName().equals("xcomp") || reln.getShortName().equals("ccomp")) && governor.equals(mainVerb)) {
                 complementVerb = dependent;
             }
-            // Find modal verbs
-            else if (reln.getShortName().equals("aux") && dependent.get(CoreAnnotations.PartOfSpeechAnnotation.class).equals("MD") && governor.equals(rootVerb)) {
-                modal = dependent.originalText().toLowerCase(Locale.ROOT);
+            // Find modal verbs.
+            else if (reln.getShortName().equals("aux") && dependent.get(CoreAnnotations.PartOfSpeechAnnotation.class).equals("MD") && governor.equals(mainVerb)) {
+                modalVerb = dependent.originalText().toLowerCase(Locale.ROOT);
             }
-            // Check for negation modifiers on the main verb
-            else if (reln.getShortName().equals("neg") && (governor.equals(rootVerb) || dependencies.getShortestUndirectedPathNodes(rootVerb, governor) != null)) {
-                isNegated = true;
+            // Check for negation modifiers on the main verb or its auxiliaries.
+            else if (reln.getShortName().equals("neg") && (governor.equals(mainVerb) || dependencies.getShortestUndirectedPathNodes(mainVerb, governor) != null)) {
+                isMainVerbNegated = true;
             }
-            // Check for "to" before complement verb (infinitive marker)
+            // Check for "to" before the complement verb (infinitive marker).
             else if (reln.getShortName().equals("mark") && governor.equals(complementVerb) && dependent.originalText().equalsIgnoreCase("to")) {
-                complementIsInfinitive = true;
+                isComplementVerbInfinitive = true;
             }
         }
 
         if (complementVerb != null) {
-            // Find the subject of the complement verb
+            // Find the subject of the complement verb.
             for (SemanticGraphEdge edge : dependencies.outgoingEdgeList(complementVerb)) {
                 GrammaticalRelation reln = edge.getRelation();
                 IndexedWord dependent = edge.getDependent();
 
                 if (reln.getShortName().equals("nsubj") || reln.getShortName().equals("nsubj:xsubj")) {
-                    subject2 = dependent;
+                    complementVerbSubject = dependent;
                     break;
                 }
             }
         }
 
-        // If the subject of the complement verb is not found, it may be controlled by the object of the main verb
-        if (subject2 == null && object != null) {
-            subject2 = object;
+        // If the subject of the complement verb is not found, it may be controlled by the object of the main verb.
+        if (complementVerbSubject == null && mainVerbObject != null) {
+            complementVerbSubject = mainVerbObject;
         }
 
-        // Check if all necessary components are found
-        if (subject1 != null && subject2 != null && complementVerb != null) {
-            // Swap pronouns to keep consistency
-            String newSubject = OBJECT_TO_SUBJECT_PRONOUN.getOrDefault(subject2.originalText().toLowerCase(Locale.ROOT), subject2.originalText());
-            String newObject = SUBJECT_TO_OBJECT_PRONOUN.getOrDefault(subject1.originalText().toLowerCase(Locale.ROOT), subject1.originalText());
+        // Check if all necessary components are found.
+        if (mainVerbSubject != null && complementVerbSubject != null && complementVerb != null) {
+            // Swap pronouns to keep consistency.
+            String newSubject = OBJECT_TO_SUBJECT_PRONOUN.getOrDefault(complementVerbSubject.originalText().toLowerCase(Locale.ROOT), complementVerbSubject.originalText());
+            String newObject = SUBJECT_TO_OBJECT_PRONOUN.getOrDefault(mainVerbSubject.originalText().toLowerCase(Locale.ROOT), mainVerbSubject.originalText());
 
-            // Capitalize the new subject
+            // Capitalize the new subject.
             newSubject = capitalizeFirstLetter(newSubject);
 
-            // Handle reflexive pronouns
-            if (isReflexivePronoun(subject2.originalText())) {
+            // Handle reflexive pronouns.
+            if (isReflexivePronoun(complementVerbSubject.originalText())) {
                 return sentence;
             }
 
-            // Extract the complement phrase
+            // Extract the complement phrase.
             Set<IndexedWord> descendants = dependencies.getSubgraphVertices(complementVerb);
             descendants.add(complementVerb);
 
-            // Remove duplicates and sort the words according to their positions in the sentence
+            // Remove duplicates and sort the words according to their positions in the sentence.
             List<IndexedWord> complementWords = new ArrayList<>(descendants);
             complementWords.sort(Comparator.comparingInt(IndexedWord::index));
 
-            // Adjusted code for handling words to exclude
+            // Create a set of words to exclude.
             Set<IndexedWord> wordsToExclude = new HashSet<>();
-            wordsToExclude.add(subject2);
-            // Also add "to" if present
+            wordsToExclude.add(complementVerbSubject);
+            // Also add "to" if present.
             for (IndexedWord word : dependencies.vertexSet()) {
                 if (word.originalText().equalsIgnoreCase("to")) {
                     wordsToExclude.add(word);
@@ -774,11 +809,10 @@ public class InjunctionDetector {
                 }
             }
 
-            // Remove subject2 and "to" from the complementWords
+            // Remove the complement verb subject and "to" from the complementWords.
             complementWords.removeIf(word -> wordsToExclude.contains(word));
 
-
-            // Build the complement phrase
+            // Build the complement phrase.
             StringBuilder complementBuilder = new StringBuilder();
             for (IndexedWord word : complementWords) {
                 complementBuilder.append(word.originalText());
@@ -786,27 +820,27 @@ public class InjunctionDetector {
             }
             String complement = complementBuilder.toString().trim();
 
-            // Adjust the complement verb tense
+            // Adjust the complement verb tense.
             String complementVerbLemma = complementVerb.get(CoreAnnotations.LemmaAnnotation.class);
-            String adjustedComplementVerb = adjustVerbForm(complementVerbLemma, mainVerbPOS, modal, complementIsInfinitive, newSubject);
+            String adjustedComplementVerb = adjustVerbForm(complementVerbLemma, mainVerbPOS, modalVerb, isComplementVerbInfinitive, newSubject);
 
-            // Replace the complement verb in the complement phrase
+            // Replace the complement verb in the complement phrase.
             complement = complement.replaceFirst("\\b" + Pattern.quote(complementVerb.originalText()) + "\\b", adjustedComplementVerb);
 
-            // Include additional modifiers or clauses attached to the complement verb
+            // Include additional modifiers or clauses attached to the complement verb.
             String additionalPhrase = extractAdditionalPhrases(dependencies, complementVerb, complementWords, wordsToExclude);
 
-            // Reconstruct the transformed sentence
+            // Reconstruct the transformed sentence.
             StringBuilder transformedSentenceBuilder = new StringBuilder();
             transformedSentenceBuilder.append(newSubject).append(" ");
 
-            // Include modal if present
-            if (!modal.isEmpty()) {
-                transformedSentenceBuilder.append(modal).append(" ");
+            // Include modal if present.
+            if (!modalVerb.isEmpty()) {
+                transformedSentenceBuilder.append(modalVerb).append(" ");
             }
 
-            // Include negation if main verb or its auxiliaries are negated
-            if (isNegated) {
+            // Include negation if the main verb or its auxiliaries are negated.
+            if (isMainVerbNegated) {
                 transformedSentenceBuilder.append("not ");
             }
 
@@ -816,8 +850,8 @@ public class InjunctionDetector {
                 transformedSentenceBuilder.append(" ").append(additionalPhrase);
             }
 
-            // Choose appropriate preposition
-            String preposition = choosePreposition(complementVerbLemma, complementIsInfinitive);
+            // Choose appropriate preposition.
+            String preposition = choosePreposition(complementVerbLemma, isComplementVerbInfinitive);
 
             transformedSentenceBuilder.append(" ").append(preposition).append(" ").append(newObject).append(".");
 
@@ -826,12 +860,57 @@ public class InjunctionDetector {
             return transformedSentence;
         }
 
-        // Return the original sentence if the pattern is not matched
+        // Return the original sentence if the pattern is not matched.
         return sentence;
     }
 
     /**
+     * Adjusts the verb form based on tense, modality, and infinitive.
+     *
+     * <p>This method conjugates the verb appropriately for the new subject and tense.
+     *
+     * @param verbLemma The base form of the verb.
+     * @param mainVerbPOS The part-of-speech tag of the main verb.
+     * @param modalVerb The modal verb associated with the main verb.
+     * @param isInfinitive Whether the verb is in infinitive form.
+     * @param subject The new subject of the verb.
+     * @return The adjusted verb form.
+     */
+    private String adjustVerbForm(String verbLemma, String mainVerbPOS, String modalVerb, boolean isInfinitive, String subject) {
+        // Handle infinitive "to be".
+        if (isInfinitive && verbLemma.equals("be")) {
+            if (!modalVerb.isEmpty()) {
+                return verbLemma;
+            } else if (mainVerbPOS.startsWith("VBD")) {
+                return subject.equalsIgnoreCase("I") ? "was" : "were";
+            } else {
+                return subject.equalsIgnoreCase("he") || subject.equalsIgnoreCase("she") || subject.equalsIgnoreCase("it") ? "is" : "are";
+            }
+        }
+
+        // Handle other verbs.
+        if (modalVerb.equals("will")) {
+            return verbLemma;
+        } else if (mainVerbPOS.startsWith("VBD")) {
+            return getPastTense(verbLemma);
+        } else if (mainVerbPOS.startsWith("VB")) {
+            return getPresentTense(verbLemma, subject);
+        }
+
+        return verbLemma;
+    }
+
+    /**
      * Extracts additional phrases attached to the complement verb, excluding specified words.
+     *
+     * <p>This method performs a breadth-first traversal starting from the complement verb,
+     * collecting all connected words while avoiding cycles and excluding specified words.
+     *
+     * @param dependencies The dependency graph of the sentence.
+     * @param complementVerb The complement verb node.
+     * @param complementWords The list of words already included in the complement phrase.
+     * @param wordsToExclude A set of words to exclude from the additional phrases.
+     * @return A string containing the additional phrases.
      */
     private String extractAdditionalPhrases(SemanticGraph dependencies, IndexedWord complementVerb, List<IndexedWord> complementWords, Set<IndexedWord> wordsToExclude) {
         List<IndexedWord> additionalWords = new ArrayList<>();
@@ -853,7 +932,7 @@ public class InjunctionDetector {
             }
         }
 
-        // Remove duplicates and sort
+        // Remove duplicates and sort.
         Set<IndexedWord> uniqueAdditionalWords = new HashSet<>(additionalWords);
         additionalWords = new ArrayList<>(uniqueAdditionalWords);
         additionalWords.sort(Comparator.comparingInt(IndexedWord::index));
@@ -887,33 +966,6 @@ public class InjunctionDetector {
     }
 
     /**
-     * Adjusts the verb form based on tense, modality, and infinitive.
-     */
-    private String adjustVerbForm(String verbLemma, String mainVerbPOS, String modal, boolean isInfinitive, String subject) {
-        // Handle infinitive "to be"
-        if (isInfinitive && verbLemma.equals("be")) {
-            if (!modal.isEmpty()) {
-                return verbLemma;
-            } else if (mainVerbPOS.startsWith("VBD")) {
-                return subject.equalsIgnoreCase("I") ? "was" : "were";
-            } else {
-                return subject.equalsIgnoreCase("he") || subject.equalsIgnoreCase("she") || subject.equalsIgnoreCase("it") ? "is" : "are";
-            }
-        }
-
-        // Handle other verbs
-        if (modal.equals("will")) {
-            return verbLemma;
-        } else if (mainVerbPOS.startsWith("VBD")) {
-            return getPastTense(verbLemma);
-        } else if (mainVerbPOS.startsWith("VB")) {
-            return getPresentTense(verbLemma, subject);
-        }
-
-        return verbLemma;
-    }
-
-    /**
      * Chooses the appropriate preposition based on context.
      */
     private String choosePreposition(String verbLemma, boolean isInfinitive) {
@@ -923,10 +975,19 @@ public class InjunctionDetector {
         return "with";
     }
 
+
     /**
      * Gets the past tense form of a verb.
      *
-     * @param verbLemma The base form of the verb.
+     * <p>This method handles both irregular and regular verbs to generate the past tense form.
+     *
+     * <p><b>Examples:</b>
+     * <pre>
+     * getPastTense("go")    ➔ "went"  (irregular)
+     * getPastTense("walk")  ➔ "walked" (regular)
+     * </pre>
+     *
+     * @param verbLemma The base form (lemma) of the verb.
      * @return The past tense form of the verb.
      */
     private String getPastTense(String verbLemma) {
@@ -936,7 +997,11 @@ public class InjunctionDetector {
         // Handle regular verbs
         if (verbLemma.endsWith("e")) {
             return verbLemma + "d";
+        } else if (verbLemma.endsWith("y") && !isVowel(verbLemma.charAt(verbLemma.length() - 2))) {
+            // For verbs ending with consonant + y (e.g., "try" ➔ "tried")
+            return verbLemma.substring(0, verbLemma.length() - 1) + "ied";
         } else {
+            // For other regular verbs
             return verbLemma + "ed";
         }
     }
@@ -944,7 +1009,16 @@ public class InjunctionDetector {
     /**
      * Gets the present tense form of a verb for third person singular subjects.
      *
-     * @param verbLemma The base form of the verb.
+     * <p>This method handles both irregular and regular verbs to generate the correct
+     * present tense form for subjects like "he", "she", or "it".
+     *
+     * <p><b>Examples:</b>
+     * <pre>
+     * getPresentTense("have", "he")  ➔ "has"    (irregular)
+     * getPresentTense("play", "she") ➔ "plays"  (regular)
+     * </pre>
+     *
+     * @param verbLemma The base form (lemma) of the verb.
      * @param subject   The subject of the verb.
      * @return The present tense form of the verb.
      */
@@ -957,10 +1031,14 @@ public class InjunctionDetector {
             }
             // Handle regular verbs
             if (verbLemma.endsWith("y") && !isVowel(verbLemma.charAt(verbLemma.length() - 2))) {
+                // For verbs ending with consonant + y (e.g., "study" ➔ "studies")
                 return verbLemma.substring(0, verbLemma.length() - 1) + "ies";
-            } else if (verbLemma.endsWith("s") || verbLemma.endsWith("sh") || verbLemma.endsWith("ch") || verbLemma.endsWith("x") || verbLemma.endsWith("z")) {
+            } else if (verbLemma.endsWith("s") || verbLemma.endsWith("sh") || verbLemma.endsWith("ch")
+                    || verbLemma.endsWith("x") || verbLemma.endsWith("z")) {
+                // For verbs ending with sibilant sounds (e.g., "watch" ➔ "watches")
                 return verbLemma + "es";
             } else {
+                // For other regular verbs (e.g., "play" ➔ "plays")
                 return verbLemma + "s";
             }
         } else {
