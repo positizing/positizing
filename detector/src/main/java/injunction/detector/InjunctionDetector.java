@@ -595,8 +595,8 @@ public class InjunctionDetector {
             if (reln.getShortName().equals("nsubj") && governor.equals(rootVerb)) {
                 subject1 = dependent; // e.g., "She"
             }
-            // Find the direct object (dobj) of the main verb
-            else if (reln.getShortName().equals("dobj") && governor.equals(rootVerb)) {
+            // Find the direct object (dobj) or indirect object (iobj) of the main verb
+            else if ((reln.getShortName().equals("dobj") || reln.getShortName().equals("iobj")) && governor.equals(rootVerb)) {
                 object = dependent; // e.g., "me"
             }
             // Find the complement verb (xcomp or ccomp) of the main verb
@@ -638,7 +638,12 @@ public class InjunctionDetector {
             List<IndexedWord> complementWords = dependencies.getSubgraphVertices(complementVerb).stream()
                     // Sort the words according to their positions in the sentence
                     .sorted(Comparator.comparingInt(IndexedWord::index)).collect(Collectors.toList());
+
             complementWords.add(complementVerb);
+
+            // Remove the subject2 from the complementWords to avoid duplicate pronouns
+            complementWords.remove(subject2);
+
             // Remove duplicates and sort the words according to their positions in the sentence
             Set<IndexedWord> uniqueComplementWords = new HashSet<>(complementWords);
             complementWords = new ArrayList<>(uniqueComplementWords);
@@ -651,6 +656,12 @@ public class InjunctionDetector {
                 complementBuilder.append(word.after()); // Preserve whitespace
             }
             String complement = complementBuilder.toString().trim();
+
+            // Handle reflexive pronouns
+            if (isReflexivePronoun(subject2.originalText())) {
+                // For reflexive cases, return the original sentence
+                return sentence;
+            }
 
             // Reconstruct the sentence in the new format
             // "NewSubject complement with NewObject."
