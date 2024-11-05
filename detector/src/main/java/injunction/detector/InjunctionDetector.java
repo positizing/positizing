@@ -41,6 +41,10 @@ public class InjunctionDetector {
 
     private static final Map<String, String> SUBJECT_TO_OBJECT_PRONOUN = new HashMap<>();
     private static final Map<String, String> OBJECT_TO_SUBJECT_PRONOUN = new HashMap<>();
+    // Add mappings for irregular verbs
+    private static final Map<String, String> IRREGULAR_PAST_TENSE_VERBS = new HashMap<>();
+    private static final Map<String, String> IRREGULAR_PRESENT_TENSE_VERBS = new HashMap<>();
+
 
     private static final Map<String, String> NEGATION_MAP = new HashMap<>();
     private static final Map<String, String> CONTRACTION_MAP = new HashMap<>();
@@ -78,6 +82,55 @@ public class InjunctionDetector {
         CONTRACTION_MAP.put("'d", " would");
         CONTRACTION_MAP.put("'ll", " will");
         CONTRACTION_MAP.put("'m", " am");
+
+        // Initialize irregular past tense verbs
+        IRREGULAR_PAST_TENSE_VERBS.put("be", "was");
+        IRREGULAR_PAST_TENSE_VERBS.put("begin", "began");
+        IRREGULAR_PAST_TENSE_VERBS.put("break", "broke");
+        IRREGULAR_PAST_TENSE_VERBS.put("bring", "brought");
+        IRREGULAR_PAST_TENSE_VERBS.put("build", "built");
+        IRREGULAR_PAST_TENSE_VERBS.put("buy", "bought");
+        IRREGULAR_PAST_TENSE_VERBS.put("catch", "caught");
+        IRREGULAR_PAST_TENSE_VERBS.put("choose", "chose");
+        IRREGULAR_PAST_TENSE_VERBS.put("come", "came");
+        IRREGULAR_PAST_TENSE_VERBS.put("do", "did");
+        IRREGULAR_PAST_TENSE_VERBS.put("feel", "felt");
+        IRREGULAR_PAST_TENSE_VERBS.put("find", "found");
+        IRREGULAR_PAST_TENSE_VERBS.put("get", "got");
+        IRREGULAR_PAST_TENSE_VERBS.put("go", "went");
+        IRREGULAR_PAST_TENSE_VERBS.put("have", "had");
+        IRREGULAR_PAST_TENSE_VERBS.put("hear", "heard");
+        IRREGULAR_PAST_TENSE_VERBS.put("keep", "kept");
+        IRREGULAR_PAST_TENSE_VERBS.put("know", "knew");
+        IRREGULAR_PAST_TENSE_VERBS.put("leave", "left");
+        IRREGULAR_PAST_TENSE_VERBS.put("make", "made");
+        IRREGULAR_PAST_TENSE_VERBS.put("say", "said");
+        IRREGULAR_PAST_TENSE_VERBS.put("see", "saw");
+        IRREGULAR_PAST_TENSE_VERBS.put("take", "took");
+        IRREGULAR_PAST_TENSE_VERBS.put("teach", "taught");
+        IRREGULAR_PAST_TENSE_VERBS.put("think", "thought");
+        IRREGULAR_PAST_TENSE_VERBS.put("write", "wrote");
+
+        // Initialize irregular present tense verbs for third person singular
+        IRREGULAR_PRESENT_TENSE_VERBS.put("be", "is");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("have", "has");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("do", "does");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("go", "goes");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("say", "says");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("make", "makes");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("know", "knows");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("think", "thinks");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("take", "takes");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("see", "sees");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("come", "comes");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("get", "gets");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("feel", "feels");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("leave", "leaves");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("give", "gives");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("find", "finds");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("tell", "tells");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("become", "becomes");
+        IRREGULAR_PRESENT_TENSE_VERBS.put("show", "shows");
 
         // Negative adverbs
         NEGATIVE_ADVERBS.add("not");
@@ -579,11 +632,18 @@ public class InjunctionDetector {
             return sentence;
         }
 
+        // Get the POS tag of the main verb
+        String mainVerbPOS = rootVerb.get(CoreAnnotations.PartOfSpeechAnnotation.class);
+        String mainVerbLemma = rootVerb.get(CoreAnnotations.LemmaAnnotation.class);
+
         // Initialize variables to hold grammatical components
-        IndexedWord subject1 = null;        // The subject of the main verb (e.g., "She")
-        IndexedWord object = null;          // The object of the main verb (e.g., "me")
-        IndexedWord complementVerb = null;  // The complement verb (e.g., "feel", "learn")
-        IndexedWord subject2 = null;        // The subject of the complement verb (e.g., "me")
+        IndexedWord subject1 = null;        // The subject of the main verb
+        IndexedWord object = null;          // The object of the main verb
+        IndexedWord complementVerb = null;  // The complement verb
+        IndexedWord subject2 = null;        // The subject of the complement verb
+        String modal = "";                  // Modal verb (e.g., "will")
+        boolean isNegated = false;          // Whether the main verb is negated
+        boolean complementIsInfinitive = false; // Whether the complement verb is an infinitive
 
         // Iterate over the dependency edges to find grammatical relations
         for (SemanticGraphEdge edge : dependencies.edgeIterable()) {
@@ -593,15 +653,27 @@ public class InjunctionDetector {
 
             // Find the nominal subject (nsubj) of the main verb
             if (reln.getShortName().equals("nsubj") && governor.equals(rootVerb)) {
-                subject1 = dependent; // e.g., "She"
+                subject1 = dependent;
             }
-            // Find the direct object (dobj) or indirect object (iobj) of the main verb
+            // Find the object (dobj or iobj) of the main verb
             else if ((reln.getShortName().equals("dobj") || reln.getShortName().equals("iobj")) && governor.equals(rootVerb)) {
-                object = dependent; // e.g., "me"
+                object = dependent;
             }
             // Find the complement verb (xcomp or ccomp) of the main verb
             else if ((reln.getShortName().equals("xcomp") || reln.getShortName().equals("ccomp")) && governor.equals(rootVerb)) {
-                complementVerb = dependent; // e.g., "feel", "learn"
+                complementVerb = dependent;
+            }
+            // Find modal verbs
+            else if (reln.getShortName().equals("aux") && dependent.get(CoreAnnotations.PartOfSpeechAnnotation.class).equals("MD") && governor.equals(rootVerb)) {
+                modal = dependent.originalText().toLowerCase(Locale.ROOT);
+            }
+            // Check for negation modifiers on the main verb
+            else if (reln.getShortName().equals("neg") && governor.equals(rootVerb)) {
+                isNegated = true;
+            }
+            // Check for "to" before complement verb (infinitive marker)
+            else if (reln.getShortName().equals("mark") && governor.equals(complementVerb) && dependent.originalText().equalsIgnoreCase("to")) {
+                complementIsInfinitive = true;
             }
         }
 
@@ -612,7 +684,7 @@ public class InjunctionDetector {
                 IndexedWord dependent = edge.getDependent();
 
                 if (reln.getShortName().equals("nsubj") || reln.getShortName().equals("nsubj:xsubj")) {
-                    subject2 = dependent; // e.g., "me"
+                    subject2 = dependent;
                     break;
                 }
             }
@@ -626,47 +698,74 @@ public class InjunctionDetector {
         // Check if all necessary components are found
         if (subject1 != null && subject2 != null && complementVerb != null) {
             // Swap pronouns to keep consistency
-            // Convert the subject pronoun of the complement verb to the new subject pronoun
-            String newSubject = OBJECT_TO_SUBJECT_PRONOUN.getOrDefault(subject2.originalText().toLowerCase(), subject2.originalText());
-            // Convert the subject pronoun of the main verb to the new object pronoun
-            String newObject = SUBJECT_TO_OBJECT_PRONOUN.getOrDefault(subject1.originalText().toLowerCase(), subject1.originalText());
+            String newSubject = OBJECT_TO_SUBJECT_PRONOUN.getOrDefault(subject2.originalText().toLowerCase(Locale.ROOT), subject2.originalText());
+            String newObject = SUBJECT_TO_OBJECT_PRONOUN.getOrDefault(subject1.originalText().toLowerCase(Locale.ROOT), subject1.originalText());
 
-            // Capitalize the new subject for proper sentence formatting
+            // Capitalize the new subject
             newSubject = capitalizeFirstLetter(newSubject);
 
-            // Extract the complement phrase starting from the complement verb
-            List<IndexedWord> complementWords = dependencies.getSubgraphVertices(complementVerb).stream()
-                    // Sort the words according to their positions in the sentence
-                    .sorted(Comparator.comparingInt(IndexedWord::index)).collect(Collectors.toList());
+            // Handle reflexive pronouns
+            if (isReflexivePronoun(subject2.originalText())) {
+                return sentence;
+            }
 
+            // Extract the complement phrase
+            List<IndexedWord> complementWords = dependencies.getLeaves(complementVerb);
             complementWords.add(complementVerb);
 
-            // Remove the subject2 from the complementWords to avoid duplicate pronouns
+            // Remove subject2 and "to" from the complementWords
             complementWords.remove(subject2);
+            complementWords.removeIf(word -> word.originalText().equalsIgnoreCase("to"));
 
-            // Remove duplicates and sort the words according to their positions in the sentence
+            // Sort the words
             Set<IndexedWord> uniqueComplementWords = new HashSet<>(complementWords);
             complementWords = new ArrayList<>(uniqueComplementWords);
             complementWords.sort(Comparator.comparingInt(IndexedWord::index));
 
-            // Build the complement phrase by concatenating the words
+            // Build the complement phrase
             StringBuilder complementBuilder = new StringBuilder();
             for (IndexedWord word : complementWords) {
                 complementBuilder.append(word.originalText());
-                complementBuilder.append(word.after()); // Preserve whitespace
+                complementBuilder.append(word.after());
             }
             String complement = complementBuilder.toString().trim();
 
-            // Handle reflexive pronouns
-            if (isReflexivePronoun(subject2.originalText())) {
-                // For reflexive cases, return the original sentence
-                return sentence;
+            // Adjust the complement verb tense
+            String complementVerbLemma = complementVerb.get(CoreAnnotations.LemmaAnnotation.class);
+            String adjustedComplementVerb = adjustVerbForm(complementVerbLemma, mainVerbPOS, modal, complementIsInfinitive, newSubject);
+
+            // Replace the complement verb in the complement phrase
+            complement = complement.replaceFirst("\\b" + Pattern.quote(complementVerb.originalText()) + "\\b", adjustedComplementVerb);
+
+            // Include additional modifiers or clauses attached to the complement verb
+            String additionalPhrase = extractAdditionalPhrases(dependencies, complementVerb, complementWords);
+
+            // Reconstruct the transformed sentence
+            StringBuilder transformedSentenceBuilder = new StringBuilder();
+            transformedSentenceBuilder.append(newSubject).append(" ");
+
+            // Include modal if present
+            if (!modal.isEmpty()) {
+                transformedSentenceBuilder.append(modal).append(" ");
             }
 
-            // Reconstruct the sentence in the new format
-            // "NewSubject complement with NewObject."
-            String transformedSentence = String.format("%s %s with %s.",
-                    newSubject, complement, newObject);
+            // Include negation if main verb is negated
+            if (isNegated) {
+                transformedSentenceBuilder.append("not ");
+            }
+
+            transformedSentenceBuilder.append(complement);
+
+            if (!additionalPhrase.isEmpty()) {
+                transformedSentenceBuilder.append(" ").append(additionalPhrase);
+            }
+
+            // Choose appropriate preposition
+            String preposition = choosePreposition(complementVerbLemma, complementIsInfinitive);
+
+            transformedSentenceBuilder.append(" ").append(preposition).append(" ").append(newObject).append(".");
+
+            String transformedSentence = transformedSentenceBuilder.toString();
 
             return transformedSentence;
         }
@@ -674,6 +773,128 @@ public class InjunctionDetector {
         // Return the original sentence if the pattern is not matched
         return sentence;
     }
+
+
+    // Add the getPastTense method
+    /**
+     * Gets the past tense form of a verb.
+     *
+     * @param verbLemma The base form of the verb.
+     * @return The past tense form of the verb.
+     */
+    private String getPastTense(String verbLemma) {
+        if (IRREGULAR_PAST_TENSE_VERBS.containsKey(verbLemma)) {
+            return IRREGULAR_PAST_TENSE_VERBS.get(verbLemma);
+        }
+        // Handle regular verbs
+        if (verbLemma.endsWith("e")) {
+            return verbLemma + "d";
+        } else {
+            return verbLemma + "ed";
+        }
+    }
+
+    // Add the getPresentTense method
+    /**
+     * Gets the present tense form of a verb for third person singular subjects.
+     *
+     * @param verbLemma The base form of the verb.
+     * @param subject   The subject of the verb.
+     * @return The present tense form of the verb.
+     */
+    private String getPresentTense(String verbLemma, String subject) {
+        String lowerSubject = subject.toLowerCase(Locale.ROOT);
+        // For third person singular subjects (he, she, it)
+        if (lowerSubject.equals("he") || lowerSubject.equals("she") || lowerSubject.equals("it")) {
+            if (IRREGULAR_PRESENT_TENSE_VERBS.containsKey(verbLemma)) {
+                return IRREGULAR_PRESENT_TENSE_VERBS.get(verbLemma);
+            }
+            // Handle regular verbs
+            if (verbLemma.endsWith("y") && !isVowel(verbLemma.charAt(verbLemma.length() - 2))) {
+                return verbLemma.substring(0, verbLemma.length() - 1) + "ies";
+            } else if (verbLemma.endsWith("s") || verbLemma.endsWith("sh") || verbLemma.endsWith("ch") || verbLemma.endsWith("x") || verbLemma.endsWith("z")) {
+                return verbLemma + "es";
+            } else {
+                return verbLemma + "s";
+            }
+        } else {
+            // For other subjects, the base form is used
+            return verbLemma;
+        }
+    }
+
+    /**
+     * Checks if a character is a vowel.
+     *
+     * @param c The character to check.
+     * @return True if the character is a vowel; false otherwise.
+     */
+    private boolean isVowel(char c) {
+        return "aeiou".indexOf(Character.toLowerCase(c)) != -1;
+    }
+
+    /**
+     * Adjusts the verb form based on tense, modality, and infinitive.
+     */
+    private String adjustVerbForm(String verbLemma, String mainVerbPOS, String modal, boolean isInfinitive, String subject) {
+        // Simple implementation
+        if (isInfinitive) {
+            if (verbLemma.equals("be")) {
+                if (mainVerbPOS.startsWith("VBD")) {
+                    return subject.equalsIgnoreCase("I") ? "was" : "were";
+                } else {
+                    return subject.equalsIgnoreCase("he") || subject.equalsIgnoreCase("she") || subject.equalsIgnoreCase("it") ? "is" : "are";
+                }
+            }
+        }
+
+        if (modal.equals("will")) {
+            return verbLemma;
+        } else if (mainVerbPOS.startsWith("VBD")) {
+            return getPastTense(verbLemma);
+        } else if (mainVerbPOS.startsWith("VB")) {
+            return getPresentTense(verbLemma, subject);
+        }
+
+        return verbLemma;
+    }
+
+    /**
+     * Chooses the appropriate preposition based on context.
+     */
+    private String choosePreposition(String verbLemma, boolean isInfinitive) {
+        if (verbLemma.equals("be") && isInfinitive) {
+            return "of";
+        }
+        return "with";
+    }
+
+    /**
+     * Extracts additional phrases attached to the complement verb.
+     */
+    private String extractAdditionalPhrases(SemanticGraph dependencies, IndexedWord complementVerb, List<IndexedWord> complementWords) {
+        List<IndexedWord> additionalWords = new ArrayList<>();
+
+        for (SemanticGraphEdge edge : dependencies.outgoingEdgeList(complementVerb)) {
+            IndexedWord dependent = edge.getDependent();
+            if (!complementWords.contains(dependent)) {
+                additionalWords.add(dependent);
+                additionalWords.addAll(dependencies.descendants(dependent));
+            }
+        }
+
+        Set<IndexedWord> uniqueAdditionalWords = new HashSet<>(additionalWords);
+        additionalWords = new ArrayList<>(uniqueAdditionalWords);
+        additionalWords.sort(Comparator.comparingInt(IndexedWord::index));
+
+        StringBuilder additionalBuilder = new StringBuilder();
+        for (IndexedWord word : additionalWords) {
+            additionalBuilder.append(word.originalText()).append(word.after());
+        }
+
+        return additionalBuilder.toString().trim();
+    }
+
 
     /**
      * Detects if the sentence contains the pattern "not only ... but also ...".
