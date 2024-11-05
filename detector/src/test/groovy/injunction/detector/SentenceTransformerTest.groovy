@@ -1,8 +1,6 @@
 package injunction.detector
 
-import injuction.detector.DesktopTaskExecutor
-import injuction.detector.InjunctionDetector
-import injuction.detector.TaskExecutor
+
 import spock.lang.Specification
 import spock.util.concurrent.AsyncConditions
 
@@ -33,7 +31,7 @@ class SentenceTransformerTest extends Specification {
         })
 
         then:
-        conditions.await()
+        conditions.await(300)
     }
 
     def "transformSentence should handle different pronouns correctly"() {

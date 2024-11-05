@@ -1,23 +1,16 @@
-package injuction.detector;
+package injunction.detector;
 
-import edu.stanford.nlp.ling.CoreAnnotations;
-import edu.stanford.nlp.ling.CoreLabel;
-import edu.stanford.nlp.ling.IndexedWord;
-import edu.stanford.nlp.pipeline.Annotation;
-import edu.stanford.nlp.pipeline.StanfordCoreNLP;
-import edu.stanford.nlp.semgraph.SemanticGraph;
-import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations;
-import edu.stanford.nlp.semgraph.SemanticGraphEdge;
+import edu.stanford.nlp.ling.*;
+import edu.stanford.nlp.pipeline.*;
+import edu.stanford.nlp.semgraph.*;
 import edu.stanford.nlp.trees.GrammaticalRelation;
-import edu.stanford.nlp.util.CoreMap;
+import edu.stanford.nlp.util.*;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -25,6 +18,8 @@ import java.util.stream.Collectors;
  *
  * A class that detects injunctions, profane words, and transforms sentences
  * based on specified linguistic patterns using Stanford CoreNLP.
+ *
+ * It also provides replacement suggestions for sentences containing injunctions and conjunctions.
  *
  * All processing is done asynchronously using a TaskExecutor.
  *
@@ -50,6 +45,9 @@ public class InjunctionDetector {
     private static final Map<String, String> CONTRACTION_MAP = new HashMap<>();
     private static final Set<String> NEGATIVE_ADVERBS = new HashSet<>();
 
+    // Precompiled pattern to detect sentence-ending punctuation
+    private static final Pattern SENTENCE_ENDING_PUNCTUATION_PATTERN = Pattern.compile("[.!?]$");
+
     static {
         // Initialize negation maps
         NEGATION_MAP.put("can't", "can");
@@ -74,13 +72,16 @@ public class InjunctionDetector {
         CONTRACTION_MAP.put("can't", "cannot");
         CONTRACTION_MAP.put("won't", "will not");
         CONTRACTION_MAP.put("n't", " not");
+        CONTRACTION_MAP.put("'re", " are");
+        CONTRACTION_MAP.put("'ve", " have");
+        CONTRACTION_MAP.put("'d", " would");
+        CONTRACTION_MAP.put("'ll", " will");
+        CONTRACTION_MAP.put("'m", " am");
 
         // Negative adverbs
         NEGATIVE_ADVERBS.add("not");
         NEGATIVE_ADVERBS.add("never");
         NEGATIVE_ADVERBS.add("no");
-        NEGATIVE_ADVERBS.add("n't");
-        NEGATIVE_ADVERBS.add("n’t");
 
         ADVERB_MATCH_LIST.addAll(NEGATIVE_ADVERBS);
 
@@ -222,75 +223,61 @@ public class InjunctionDetector {
          *   - POS tagging and lemmatization add grammatical information to tokens.
          *   - Parsing annotators (parse and depparse) provide deep syntactic structures necessary for advanced NLP tasks.
          */
+
         pipeline = new StanfordCoreNLP(props);
     }
 
     /**
-     * Main method for testing purposes.
+     * Detects if the sentence ends with proper punctuation using a regex pattern.
+     *
+     * This method checks if the input sentence ends with a sentence-ending punctuation mark
+     * (e.g., ".", "!", "?") using a precompiled regex pattern.
+     *
+     * @param sentence The sentence to check.
+     * @return True if the sentence ends with appropriate punctuation; false otherwise.
      */
-    public static void main(String... args) {
-        TaskExecutor executor = new DesktopTaskExecutor();
-        InjunctionDetector detector = new InjunctionDetector(executor);
-
-        String testSentence = "She makes me feel happy.";
-
-        detector.transformSentence(testSentence, transformed -> {
-            System.out.println("Original Sentence: " + testSentence);
-            System.out.println("Transformed Sentence: " + transformed);
-        });
-
-        // Additional examples
-        List<String> testSentences = Arrays.asList(
-                "She is not only talented but also hardworking.",
-                "I can't believe this happened!",
-                "This is absolutely unacceptable."
-        );
-
-        for (String sentence : testSentences) {
-            detector.isInjunctionAsync(sentence, result -> {
-                System.out.println("Sentence: " + sentence);
-                System.out.println("Contains Injunction: " + result);
-                System.out.println("-----------------------------------");
-            });
-
-            detector.containsProfanityAsync(sentence, result -> {
-                System.out.println("Sentence: " + sentence);
-                System.out.println("Contains Profanity: " + result);
-                System.out.println("-----------------------------------");
-            });
-
-            detector.suggestImprovedSentenceAsync(sentence, improved -> {
-                System.out.println("Original Sentence: " + sentence);
-                System.out.println("Improved Sentence: " + improved);
-                System.out.println("-----------------------------------");
-            });
+    private boolean endsWithPunctuation(String sentence) {
+        if (sentence == null || sentence.isEmpty()) {
+            return false;
         }
 
-        String injunctionTestSentence = "I can't believe this happened!";
+        // Trim any trailing whitespace
+        sentence = sentence.trim();
 
-        detector.suggestInjunctionReplacementAsync(injunctionTestSentence, replacement -> {
-            System.out.println("Original Sentence: " + injunctionTestSentence);
-            System.out.println("Replacement Sentence: " + replacement);
-        });
+        // Use the precompiled regex pattern to check for sentence-ending punctuation
+        return SENTENCE_ENDING_PUNCTUATION_PATTERN.matcher(sentence).find();
+    }
 
-
-        String conjunctionSentence = "I want to go, but it's raining.";
-
-        detector.suggestConjunctionReplacementAsync(conjunctionSentence, replacement -> {
-            System.out.println("Original Sentence: " + conjunctionSentence);
-            System.out.println("Replacement Sentence: " + replacement);
-        });
+    /**
+     * Suggests an improved sentence if it matches specific patterns.
+     *
+     * @param message The original message.
+     * @return The improved sentence if applicable; otherwise, the original message.
+     */
+    public String suggestImprovedSentence(final String message) {
+        if (detectNotOnlyButAlsoPattern(message)) {
+            // Use parse tree to reconstruct the sentence
+            return rewriteNotOnlyButAlsoSentenceUsingParseTree(message);
+        }
+        // Return the original message if no improvement is needed
+        return message;
     }
 
     /**
      * Asynchronously checks if the given message contains an injunction.
      *
-     * @param message  The message to check.
-     * @param callback The callback to receive the result.
+     * This method leverages the TaskExecutor to perform the injunction detection
+     * in a separate thread, allowing the main thread to continue without blocking.
+     *
+     * @param message  The message to analyze.
+     * @param callback A Consumer<Boolean> callback to receive the result.
      */
     public void isInjunctionAsync(final String message, Consumer<Boolean> callback) {
+        // Execute the injunction detection in a separate thread
         taskExecutor.execute(() -> {
+            // Perform the synchronous injunction check
             boolean result = isInjunction(message);
+            // Pass the result to the callback
             callback.accept(result);
         });
     }
@@ -298,7 +285,10 @@ public class InjunctionDetector {
     /**
      * Checks if the given message contains an injunction.
      *
-     * @param message The message to check.
+     * This method performs a synchronous analysis of the input message to determine
+     * if it contains any injunctions based on predefined patterns and linguistic features.
+     *
+     * @param message The message to analyze.
      * @return True if an injunction is detected; false otherwise.
      */
     public boolean isInjunction(final String message) {
@@ -307,6 +297,7 @@ public class InjunctionDetector {
             return true;
         }
 
+        // Annotate the message
         Annotation document = new Annotation(message);
         pipeline.annotate(document);
         List<CoreLabel> tokens = document.get(CoreAnnotations.TokensAnnotation.class);
@@ -314,20 +305,34 @@ public class InjunctionDetector {
         for (CoreLabel token : tokens) {
             String pos = token.get(CoreAnnotations.PartOfSpeechAnnotation.class);
             String word = token.originalText().toLowerCase(Locale.ROOT);
+            String lemma = token.get(CoreAnnotations.LemmaAnnotation.class).toLowerCase(Locale.ROOT);
+
+            // Check for negative contractions and negative adverbs
+            if (NEGATION_MAP.containsKey(word) || NEGATIVE_ADVERBS.contains(word) || NEGATIVE_ADVERBS.contains(lemma)) {
+                return true;
+            }
+
+            // Additionally, check if the token ends with "n't" (e.g., "didn't", "couldn't")
+            if (word.endsWith("n't") || word.endsWith("n’t")) {
+                return true;
+            }
 
             switch (pos) {
                 case TYPE_ADVERB:
-                    if (ADVERB_MATCH_LIST.contains(word)) {
+                    // Check if the adverb matches any in the ADVERB_MATCH_LIST
+                    if (ADVERB_MATCH_LIST.contains(word) || ADVERB_MATCH_LIST.contains(lemma)) {
                         return true;
                     }
                     break;
                 case TYPE_MODAL:
-                    if (MODAL_MATCH_LIST.contains(word)) {
+                    // Check if the modal verb matches any in the MODAL_MATCH_LIST
+                    if (MODAL_MATCH_LIST.contains(word) || MODAL_MATCH_LIST.contains(lemma)) {
                         return true;
                     }
                     break;
                 case TYPE_CONJUNCTION:
-                    if (CONJUNCTION_MATCH_LIST.contains(word)) {
+                    // Check if the conjunction matches any in the CONJUNCTION_MATCH_LIST
+                    if (CONJUNCTION_MATCH_LIST.contains(word) || CONJUNCTION_MATCH_LIST.contains(lemma)) {
                         return true;
                     }
                     break;
@@ -383,21 +388,6 @@ public class InjunctionDetector {
     }
 
     /**
-     * Suggests an improved sentence if it matches specific patterns.
-     *
-     * @param message The original message.
-     * @return The improved sentence if applicable; otherwise, the original message.
-     */
-    public String suggestImprovedSentence(final String message) {
-        if (detectNotOnlyButAlsoPattern(message)) {
-            // Use parse tree to reconstruct the sentence
-            return rewriteNotOnlyButAlsoSentenceUsingParseTree(message);
-        }
-        // Return the original message if no improvement is needed
-        return message;
-    }
-
-    /**
      * Asynchronously suggests a replacement for sentences containing injunctions.
      *
      * @param message  The original message.
@@ -433,7 +423,6 @@ public class InjunctionDetector {
                 CoreLabel token = tokens.get(i);
                 String word = token.originalText();
                 String lowerWord = word.toLowerCase(Locale.ROOT);
-                String lemma = token.get(CoreAnnotations.LemmaAnnotation.class).toLowerCase(Locale.ROOT);
 
                 if (NEGATION_MAP.containsKey(lowerWord)) {
                     // Replace negative verb with its positive form
@@ -451,7 +440,8 @@ public class InjunctionDetector {
                 // Append whitespace
                 sentenceBuilder.append(token.after());
             }
-            result.append(sentenceBuilder.toString().trim());
+            String modifiedSentence = sentenceBuilder.toString().trim();
+            result.append(modifiedSentence);
             result.append(" ");
         }
 
@@ -460,10 +450,7 @@ public class InjunctionDetector {
             String replacementSentence = result.toString().trim();
             // Capitalize the first letter
             replacementSentence = capitalizeFirstLetter(replacementSentence);
-            // Ensure proper punctuation
-            if (!replacementSentence.endsWith(".")) {
-                replacementSentence += ".";
-            }
+            // We are not adding any punctuation here, per your request
             return replacementSentence;
         } else {
             // Return the original message if no injunction is found
@@ -518,7 +505,8 @@ public class InjunctionDetector {
                 // Append whitespace
                 sentenceBuilder.append(token.after());
             }
-            result.append(sentenceBuilder.toString().trim());
+            String modifiedSentence = sentenceBuilder.toString().trim();
+            result.append(modifiedSentence);
             result.append(" ");
         }
 
@@ -527,10 +515,7 @@ public class InjunctionDetector {
             String replacementSentence = result.toString().trim();
             // Capitalize the first letter
             replacementSentence = capitalizeFirstLetter(replacementSentence);
-            // Ensure proper punctuation
-            if (!replacementSentence.endsWith(".")) {
-                replacementSentence += ".";
-            }
+            // We are not adding any punctuation here, per your request
             return replacementSentence;
         } else {
             // Return the original message if no conjunction is found
@@ -620,7 +605,7 @@ public class InjunctionDetector {
             // Extract the complement phrase (e.g., "feel happy")
             List<IndexedWord> complementWords = dependencies.getSubgraphVertices(complementVerb).stream()
                     // Sort the words according to their positions in the sentence
-                    .sorted(Comparator.comparingInt(IndexedWord::index)).collect(Collectors.toList());
+                   .sorted(Comparator.comparingInt(IndexedWord::index)).collect(Collectors.toList());
             // Sort the words according to their positions in the sentence
 
             // Build the complement phrase by concatenating the words
@@ -755,7 +740,13 @@ public class InjunctionDetector {
             improvedSentence.setCharAt(0, Character.toUpperCase(improvedSentence.charAt(0)));
         }
 
-        return improvedSentence.toString();
+        // Ensure proper punctuation
+        String improvedText = improvedSentence.toString().trim();
+        if (!improvedText.endsWith(".") && !improvedText.endsWith("!") && !improvedText.endsWith("?")) {
+            improvedText += ".";
+        }
+
+        return improvedText;
     }
 
     /**
@@ -776,15 +767,15 @@ public class InjunctionDetector {
     }
 
     /**
-     * Capitalizes the first letter of a word.
+     * Capitalizes the first letter of a sentence.
      *
-     * @param word The word to capitalize.
-     * @return The word with the first letter capitalized.
+     * @param sentence The sentence to capitalize.
+     * @return The sentence with the first letter capitalized.
      */
-    private String capitalizeFirstLetter(String word) {
-        if (word == null || word.isEmpty()) {
-            return word;
+    private String capitalizeFirstLetter(String sentence) {
+        if (sentence == null || sentence.isEmpty()) {
+            return sentence;
         }
-        return word.substring(0, 1).toUpperCase() + word.substring(1);
+        return sentence.substring(0, 1).toUpperCase() + sentence.substring(1);
     }
 }

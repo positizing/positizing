@@ -1,4 +1,4 @@
-package injuction.detector;
+package injunction.detector;
 
 /**
  * DesktopTaskExecutor:
