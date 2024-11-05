@@ -17,10 +17,8 @@ class SentenceTransformerTest extends Specification {
         detector = new InjunctionDetector(executor)
     }
 
-    def "transformSentence should correctly transform simple sentences"() {
+    def "transformSentence should correctly transform various sentences"() {
         given:
-        String testSentence = "She makes me feel happy."
-        String expectedTransformed = "I feel happy with her."
         def conditions = new AsyncConditions(1)
 
         when:
@@ -32,6 +30,49 @@ class SentenceTransformerTest extends Specification {
 
         then:
         conditions.await(300)
+
+        where:
+        testSentence                                      | expectedTransformed
+        // Test Case 1: Original test case
+        "She makes me feel happy."                        | "I feel happy with her."
+        // Test Case 2: Different pronouns
+        "He makes us feel appreciated."                   | "We feel appreciated with him."
+        // Test Case 3: Plural subjects and objects
+        "They make them feel welcome."                    | "They feel welcome with them."
+        // Test Case 4: Different verbs
+        "You help me learn new skills."                   | "I learn new skills with you."
+        // Test Case 5: Complex complement
+        "She encourages him to be confident."             | "He is confident with her."
+        // Test Case 6: Modal verb in complement
+        "They want me to succeed."                        | "I succeed with them."
+        // Test Case 7: Sentence without matching pattern
+        "This sentence does not match the pattern."       | "This sentence does not match the pattern."
+        // Test Case 8: Reflexive pronoun
+        "She teaches herself to play piano."              | "She teaches herself to play piano."
+        // Test Case 9: Indirect object
+        "He gives me hope."                               | "He gives me hope."
+        // Test Case 10: Passive voice
+        "I am made to feel special by her."               | "I am made to feel special by her."
+        // Test Case 11: Different tense
+        "She made me feel happy."                         | "I felt happy with her."
+        // Test Case 12: Future tense
+        "He will make me feel proud."                     | "I will feel proud with him."
+        // Test Case 13: Negative sentence
+        "She doesn't make me feel sad."                   | "I don't feel sad with her."
+        // Test Case 14: Sentence with additional clauses
+        "They make me feel inspired when they perform."   | "I feel inspired with them when they perform."
+        // Test Case 15: Sentence with adverbs
+        "He really makes me feel loved."                  | "I feel loved with him."
+        // Test Case 16: Sentence with adjectives
+        "She makes me feel extremely happy."              | "I feel extremely happy with her."
+        // Test Case 17: Sentence with multiple objects
+        "He makes me and my friends feel welcome."        | "We feel welcome with him."
+        // Test Case 18: Sentence with prepositional phrase
+        "She makes me feel at home."                      | "I feel at home with her."
+        // Test Case 19: Sentence with conjunction
+        "They make us feel excited and nervous."          | "We feel excited and nervous with them."
+        // Test Case 20: Sentence with idiom
+        "He makes me feel on top of the world."           | "I feel on top of the world with him."
     }
 
     def "transformSentence should handle different pronouns correctly"() {
