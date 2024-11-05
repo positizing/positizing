@@ -33,6 +33,7 @@ import java.util.stream.Collectors;
 public class InjunctionDetector {
 
     // list of PartsOfSpeech types here: https://surdeanu.cs.arizona.edu//mihai/teaching/ista555-fall13/readings/PennTreebankConstituents.html
+
     private static final String TYPE_ADVERB = "RB";
     private static final String TYPE_MODAL = "MD";
     private static final String TYPE_CONJUNCTION = "CC";
@@ -45,11 +46,44 @@ public class InjunctionDetector {
     private static final Map<String, String> SUBJECT_TO_OBJECT_PRONOUN = new HashMap<>();
     private static final Map<String, String> OBJECT_TO_SUBJECT_PRONOUN = new HashMap<>();
 
+    private static final Map<String, String> NEGATION_MAP = new HashMap<>();
+    private static final Map<String, String> CONTRACTION_MAP = new HashMap<>();
+    private static final Set<String> NEGATIVE_ADVERBS = new HashSet<>();
+
     static {
-        ADVERB_MATCH_LIST.add("not");
-        ADVERB_MATCH_LIST.add("never");
-        ADVERB_MATCH_LIST.add("n't");
-        ADVERB_MATCH_LIST.add("n’t");
+        // Initialize negation maps
+        NEGATION_MAP.put("can't", "can");
+        NEGATION_MAP.put("cannot", "can");
+        NEGATION_MAP.put("don't", "do");
+        NEGATION_MAP.put("doesn't", "does");
+        NEGATION_MAP.put("didn't", "did");
+        NEGATION_MAP.put("won't", "will");
+        NEGATION_MAP.put("wouldn't", "would");
+        NEGATION_MAP.put("shouldn't", "should");
+        NEGATION_MAP.put("couldn't", "could");
+        NEGATION_MAP.put("isn't", "is");
+        NEGATION_MAP.put("aren't", "are");
+        NEGATION_MAP.put("wasn't", "was");
+        NEGATION_MAP.put("weren't", "were");
+        NEGATION_MAP.put("haven't", "have");
+        NEGATION_MAP.put("hasn't", "has");
+        NEGATION_MAP.put("hadn't", "had");
+        NEGATION_MAP.put("n't", ""); // For cases like "couldn't" ➔ "could"
+
+        // Map contractions to full forms
+        CONTRACTION_MAP.put("can't", "cannot");
+        CONTRACTION_MAP.put("won't", "will not");
+        CONTRACTION_MAP.put("n't", " not");
+
+        // Negative adverbs
+        NEGATIVE_ADVERBS.add("not");
+        NEGATIVE_ADVERBS.add("never");
+        NEGATIVE_ADVERBS.add("no");
+        NEGATIVE_ADVERBS.add("n't");
+        NEGATIVE_ADVERBS.add("n’t");
+
+        ADVERB_MATCH_LIST.addAll(NEGATIVE_ADVERBS);
+
         MODAL_MATCH_LIST.add("should");
 
         // Initialize conjunction match list
@@ -98,8 +132,96 @@ public class InjunctionDetector {
     public InjunctionDetector(TaskExecutor taskExecutor) {
         this.taskExecutor = taskExecutor;
 
+        // Configure the Stanford CoreNLP pipeline with the desired annotators
         Properties props = new Properties();
+
+        // The 'annotators' property specifies the sequence of annotators to be applied to the text.
+        // The annotators are applied in the order they are listed.
+        // In this configuration, we include the following annotators:
         props.put("annotators", "tokenize, ssplit, pos, lemma, parse, depparse");
+
+        /*
+         * Explanation of each annotator:
+         *
+         * 1. tokenize:
+         *    - Purpose:
+         *      - Splits the input text into individual tokens (words, punctuation marks, etc.).
+         *      - Tokenization is the fundamental first step in NLP preprocessing.
+         *    - How it works:
+         *      - Uses language-specific rules to handle different writing systems and punctuation.
+         *    - Why it's needed:
+         *      - Subsequent annotators (like POS tagging and parsing) operate on tokens.
+         *      - Essential for any text processing tasks as it defines the units of analysis.
+         *
+         * 2. ssplit (Sentence Splitter):
+         *    - Purpose:
+         *      - Divides the text into sentences.
+         *      - Identifies sentence boundaries based on punctuation and capitalization.
+         *    - How it works:
+         *      - Uses language-specific rules and machine learning models to detect sentence ends.
+         *    - Why it's needed:
+         *      - Many NLP tasks, such as parsing and coreference resolution, are performed at the sentence level.
+         *      - Essential for correctly parsing and understanding the grammatical structure of the text.
+         *
+         * 3. pos (Part-of-Speech Tagger):
+         *    - Purpose:
+         *      - Assigns part-of-speech tags to each token (e.g., noun, verb, adjective).
+         *      - Provides grammatical information about each word.
+         *    - How it works:
+         *      - Uses statistical models trained on annotated corpora to predict POS tags.
+         *    - Why it's needed:
+         *      - POS tags are crucial for syntactic parsing and understanding sentence structure.
+         *      - In the InjunctionDetector, POS tags help identify injunctions by matching specific POS patterns (e.g., adverbs like "not").
+         *      - Enables filtering or transforming text based on grammatical categories.
+         *
+         * 4. lemma (Lemmatization):
+         *    - Purpose:
+         *      - Reduces words to their base or dictionary form (lemma).
+         *      - Normalizes different forms of a word to a single representation.
+         *    - How it works:
+         *      - Uses morphological analysis and dictionaries to map inflected forms to lemmas.
+         *    - Why it's needed:
+         *      - Essential for tasks like matching words against a profanity list regardless of tense or plurality.
+         *      - Improves the accuracy of text analysis by considering word variants as the same token.
+         *      - In the InjunctionDetector, lemmatization ensures that words like "running" and "ran" are recognized as "run".
+         *
+         * 5. parse (Constituency Parser):
+         *    - Purpose:
+         *      - Generates a constituency parse tree (phrase structure tree) for each sentence.
+         *      - Represents the hierarchical structure of sentences in terms of nested constituents (phrases).
+         *    - How it works:
+         *      - Uses probabilistic context-free grammars (PCFG) to parse sentences.
+         *    - Why it's needed:
+         *      - Provides detailed syntactic information about the sentence structure.
+         *      - In the InjunctionDetector, it's used to:
+         *        - Reconstruct sentences in methods like `rewriteNotOnlyButAlsoSentenceUsingParseTree()`.
+         *        - Handle complex sentence transformations that rely on understanding phrase boundaries.
+         *      - Helps in disambiguating syntactic ambiguities in sentences.
+         *
+         * 6. depparse (Dependency Parser):
+         *    - Purpose:
+         *      - Generates a dependency parse tree for each sentence.
+         *      - Represents grammatical relations between words (e.g., subject, object, modifiers).
+         *    - How it works:
+         *      - Uses models trained on dependency treebanks to predict relations between words.
+         *    - Why it's needed:
+         *      - Essential for understanding the functional relationships in a sentence.
+         *      - In the InjunctionDetector, dependency parsing is used to:
+         *        - Identify grammatical roles such as subject (`nsubj`), object (`dobj`), and complement verbs (`xcomp`, `ccomp`).
+         *        - Perform transformations in methods like `transformSentenceInternal()` by locating specific grammatical patterns.
+         *      - Enables accurate manipulation of sentence components based on their syntactic roles.
+         *
+         * Rationale for including these annotators:
+         * - The combination of these annotators provides a comprehensive linguistic analysis of the text.
+         * - They enable the InjunctionDetector to:
+         *   - Detect complex linguistic patterns and injunctions in the text.
+         *   - Perform sophisticated sentence transformations while maintaining grammatical correctness.
+         *   - Identify and process parts of the text based on grammatical categories and relationships.
+         * - The order of annotators ensures that each step builds upon the previous ones:
+         *   - Tokenization and sentence splitting prepare the text for analysis.
+         *   - POS tagging and lemmatization add grammatical information to tokens.
+         *   - Parsing annotators (parse and depparse) provide deep syntactic structures necessary for advanced NLP tasks.
+         */
         pipeline = new StanfordCoreNLP(props);
     }
 
@@ -143,6 +265,21 @@ public class InjunctionDetector {
                 System.out.println("-----------------------------------");
             });
         }
+
+        String injunctionTestSentence = "I can't believe this happened!";
+
+        detector.suggestInjunctionReplacementAsync(injunctionTestSentence, replacement -> {
+            System.out.println("Original Sentence: " + injunctionTestSentence);
+            System.out.println("Replacement Sentence: " + replacement);
+        });
+
+
+        String conjunctionSentence = "I want to go, but it's raining.";
+
+        detector.suggestConjunctionReplacementAsync(conjunctionSentence, replacement -> {
+            System.out.println("Original Sentence: " + conjunctionSentence);
+            System.out.println("Replacement Sentence: " + replacement);
+        });
     }
 
     /**
@@ -258,6 +395,147 @@ public class InjunctionDetector {
         }
         // Return the original message if no improvement is needed
         return message;
+    }
+
+    /**
+     * Asynchronously suggests a replacement for sentences containing injunctions.
+     *
+     * @param message  The original message.
+     * @param callback The callback to receive the replacement sentence.
+     */
+    public void suggestInjunctionReplacementAsync(final String message, Consumer<String> callback) {
+        taskExecutor.execute(() -> {
+            String replacement = suggestInjunctionReplacement(message);
+            callback.accept(replacement);
+        });
+    }
+
+    /**
+     * Suggests a replacement for sentences containing injunctions by removing negations.
+     *
+     * @param message The original message.
+     * @return The replacement sentence if an injunction is detected; otherwise, returns the original message.
+     */
+    public String suggestInjunctionReplacement(final String message) {
+        Annotation document = new Annotation(message);
+        pipeline.annotate(document);
+
+        List<CoreMap> sentences = document.get(CoreAnnotations.SentencesAnnotation.class);
+        StringBuilder result = new StringBuilder();
+
+        boolean injunctionFound = false;
+
+        for (CoreMap sentence : sentences) {
+            List<CoreLabel> tokens = sentence.get(CoreAnnotations.TokensAnnotation.class);
+            StringBuilder sentenceBuilder = new StringBuilder();
+
+            for (int i = 0; i < tokens.size(); i++) {
+                CoreLabel token = tokens.get(i);
+                String word = token.originalText();
+                String lowerWord = word.toLowerCase(Locale.ROOT);
+                String lemma = token.get(CoreAnnotations.LemmaAnnotation.class).toLowerCase(Locale.ROOT);
+
+                if (NEGATION_MAP.containsKey(lowerWord)) {
+                    // Replace negative verb with its positive form
+                    String replacement = NEGATION_MAP.get(lowerWord);
+                    sentenceBuilder.append(replacement);
+                    injunctionFound = true;
+                } else if (NEGATIVE_ADVERBS.contains(lowerWord)) {
+                    // Skip the negative adverb
+                    injunctionFound = true;
+                    continue;
+                } else {
+                    // Keep the original word
+                    sentenceBuilder.append(word);
+                }
+                // Append whitespace
+                sentenceBuilder.append(token.after());
+            }
+            result.append(sentenceBuilder.toString().trim());
+            result.append(" ");
+        }
+
+        if (injunctionFound) {
+            // Return the modified sentence
+            String replacementSentence = result.toString().trim();
+            // Capitalize the first letter
+            replacementSentence = capitalizeFirstLetter(replacementSentence);
+            // Ensure proper punctuation
+            if (!replacementSentence.endsWith(".")) {
+                replacementSentence += ".";
+            }
+            return replacementSentence;
+        } else {
+            // Return the original message if no injunction is found
+            return message;
+        }
+    }
+
+    /**
+     * Asynchronously suggests a replacement for sentences containing conjunctions like "but".
+     *
+     * @param message  The original message.
+     * @param callback The callback to receive the replacement sentence.
+     */
+    public void suggestConjunctionReplacementAsync(final String message, Consumer<String> callback) {
+        taskExecutor.execute(() -> {
+            String replacement = suggestConjunctionReplacement(message);
+            callback.accept(replacement);
+        });
+    }
+
+    /**
+     * Suggests a replacement for sentences containing conjunctions by replacing "but" with "and".
+     *
+     * @param message The original message.
+     * @return The replacement sentence if a conjunction is detected; otherwise, returns the original message.
+     */
+    public String suggestConjunctionReplacement(final String message) {
+        Annotation document = new Annotation(message);
+        pipeline.annotate(document);
+
+        List<CoreMap> sentences = document.get(CoreAnnotations.SentencesAnnotation.class);
+        StringBuilder result = new StringBuilder();
+
+        boolean conjunctionFound = false;
+
+        for (CoreMap sentence : sentences) {
+            List<CoreLabel> tokens = sentence.get(CoreAnnotations.TokensAnnotation.class);
+            StringBuilder sentenceBuilder = new StringBuilder();
+
+            for (CoreLabel token : tokens) {
+                String word = token.originalText();
+                String lowerWord = word.toLowerCase(Locale.ROOT);
+
+                if (CONJUNCTION_MATCH_LIST.contains(lowerWord)) {
+                    // Replace "but" with "and"
+                    sentenceBuilder.append("and");
+                    conjunctionFound = true;
+                } else {
+                    // Keep the original word
+                    sentenceBuilder.append(word);
+                }
+                // Append whitespace
+                sentenceBuilder.append(token.after());
+            }
+            result.append(sentenceBuilder.toString().trim());
+            result.append(" ");
+        }
+
+        if (conjunctionFound) {
+            // Return the modified sentence
+            String replacementSentence = result.toString().trim();
+            // Capitalize the first letter
+            replacementSentence = capitalizeFirstLetter(replacementSentence);
+            // Ensure proper punctuation
+            if (!replacementSentence.endsWith(".")) {
+                replacementSentence += ".";
+            }
+            return replacementSentence;
+        } else {
+            // Return the original message if no conjunction is found
+            return message;
+        }
     }
 
     /**

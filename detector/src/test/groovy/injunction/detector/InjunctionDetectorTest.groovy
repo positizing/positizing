@@ -6,7 +6,7 @@ import injuction.detector.InjunctionDetector
 import spock.lang.Specification
 import spock.lang.Unroll
 
-@CompileStatic
+//@CompileStatic
 class InjunctionDetectorTest extends Specification {
 
     InjunctionDetector detector
@@ -17,12 +17,12 @@ class InjunctionDetectorTest extends Specification {
 
     def "Detector can find simple 'not' phrases"() {
         expect:
-        detector.isInjuction("You don’t have time for distractions")
+        detector.isInjunction("You don’t have time for distractions")
     }
 
     def "Detector works on a wide variety of phrases containing injunctions"(String testText) {
         expect:
-        detector.isInjuction(testText)
+        detector.isInjunction(testText)
 
         where:
         testText << [
@@ -43,7 +43,7 @@ class InjunctionDetectorTest extends Specification {
 
     def "Detector can find phrases containing 'should'"(String testText) {
         expect:
-        detector.isInjuction(testText)
+        detector.isInjunction(testText)
 
         where:
         testText << [
@@ -57,7 +57,7 @@ class InjunctionDetectorTest extends Specification {
 
     def "Detector can find phrases containing 'but'"(String testText) {
         expect:
-        detector.isInjuction(testText)
+        detector.isInjunction(testText)
 
         where:
         testText << [
@@ -71,7 +71,7 @@ class InjunctionDetectorTest extends Specification {
 
     def "Detector does not detect injunctions in neutral phrases"(String testText) {
         expect:
-        !detector.isInjuction(testText)
+        !detector.isInjunction(testText)
 
         where:
         testText << [
@@ -85,7 +85,7 @@ class InjunctionDetectorTest extends Specification {
 
     def "Detector correctly identifies phrases without 'but' as non-injunctions"(String testText) {
         expect:
-        !detector.isInjuction(testText)
+        !detector.isInjunction(testText)
 
         where:
         testText << [
@@ -99,7 +99,7 @@ class InjunctionDetectorTest extends Specification {
 
     def "Detector handles phrases with 'but' that are not injunctions"(String testText) {
         expect:
-        !detector.isInjuction(testText)
+        !detector.isInjunction(testText)
 
         where:
         testText << [
@@ -113,7 +113,7 @@ class InjunctionDetectorTest extends Specification {
 
     def "Detector correctly identifies complex phrases with expected results"(String testText, boolean expected) {
         expect:
-        detector.isInjuction(testText) == expected
+        detector.isInjunction(testText) == expected
 
         where:
         testText                                             || expected
@@ -135,7 +135,7 @@ class InjunctionDetectorTest extends Specification {
 
     def "Detector handles phrases with both injunctions and profanity"(String testText, boolean expectedInjunction, boolean expectedProfanity) {
         expect:
-        detector.isInjuction(testText) == expectedInjunction
+        detector.isInjunction(testText) == expectedInjunction
         detector.containsProfanity(testText) == expectedProfanity
 
         where:
@@ -152,7 +152,7 @@ class InjunctionDetectorTest extends Specification {
 
     def "Detector does not detect injunctions in phrases with 'but' used positively"(String testText) {
         expect:
-        !detector.isInjuction(testText)
+        !detector.isInjunction(testText)
 
         where:
         testText << [
@@ -166,7 +166,7 @@ class InjunctionDetectorTest extends Specification {
 
     def "Detector handles edge cases for 'not' and 'but'"(String testText, boolean expected) {
         expect:
-        detector.isInjuction(testText) == expected
+        detector.isInjunction(testText) == expected
 
         where:
         testText                                        || expected
@@ -179,7 +179,7 @@ class InjunctionDetectorTest extends Specification {
 
     def "Detector correctly identifies phrases with negations and conjunctions"(String testText, boolean expected) {
         expect:
-        detector.isInjuction(testText) == expected
+        detector.isInjunction(testText) == expected
 
         where:
         testText                                                   || expected
@@ -201,7 +201,7 @@ class InjunctionDetectorTest extends Specification {
         String testText = "She is not only talented but also hardworking."
 
         when:
-        boolean hasInjunction = detector.isInjuction(testText)
+        boolean hasInjunction = detector.isInjunction(testText)
         String improvedText = detector.suggestImprovedSentence(testText)
 
         then:
@@ -211,7 +211,7 @@ class InjunctionDetectorTest extends Specification {
 
     def "Detector can find and improve multiple sentences"(String testText, String expectedImprovedText) {
         when:
-        boolean hasInjunction = detector.isInjuction(testText)
+        boolean hasInjunction = detector.isInjunction(testText)
         String improvedText = detector.suggestImprovedSentence(testText)
 
         then:
@@ -229,7 +229,7 @@ class InjunctionDetectorTest extends Specification {
     @Unroll
     def "Detector leaves sentences unchanged when no improvement is needed"(String testText) {
         when:
-        boolean hasInjunction = detector.isInjuction(testText)
+        boolean hasInjunction = detector.isInjunction(testText)
         String improvedText = detector.suggestImprovedSentence(testText)
 
         then:
@@ -249,7 +249,7 @@ class InjunctionDetectorTest extends Specification {
     @Unroll
     def "Detector identifies sentences with multiple injunctions"(String testText) {
         expect:
-        detector.isInjuction(testText)
+        detector.isInjunction(testText)
 
         where:
         testText << [
@@ -262,7 +262,7 @@ class InjunctionDetectorTest extends Specification {
     @Unroll
     def "Detector avoids false positives with substring matches"(String testText) {
         expect:
-        !detector.isInjuction(testText)
+        !detector.isInjunction(testText)
 
         where:
         testText << [
