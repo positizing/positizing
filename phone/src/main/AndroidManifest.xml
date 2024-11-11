@@ -19,7 +19,7 @@
                  android:largeHeap="true"
             >
 
-        <activity android:name=".PhonePositizingActivity"
+        <activity android:name=".MainActivity"
                   android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
                   android:exported="true">
             <intent-filter>

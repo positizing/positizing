@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:id="@+id/suggestions_activity_layout"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:padding="16dp">
+
+    <!-- Original Sentence TextView -->
+    <TextView
+            android:id="@+id/original_sentence_text_view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/original_sentence"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+    <!-- Suggestions ListView -->
+    <ListView
+            android:id="@+id/suggestions_list_view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp" />
+
+</LinearLayout>
