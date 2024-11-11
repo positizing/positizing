@@ -51,7 +51,7 @@ import java.util.regex.Pattern;
  * <p><b>Author:</b> James X. Nelson (James@WeTheInter.net)
  * <br><b>Created:</b> 02/09/2024 @ 4:03 a.m.
  */
-public class InjunctionDetector {
+public class NegativeSpeechDetector {
 
     // List of Parts of Speech (POS) tags can be found here:
     // https://surdeanu.cs.arizona.edu/mihai/teaching/ista555-fall13/readings/PennTreebankConstituents.html
@@ -223,7 +223,7 @@ public class InjunctionDetector {
         IRREGULAR_PRESENT_TENSE_VERBS.put("show", "shows");
 
         // Load profane words from 'profane_words.txt'.
-        try (InputStream inputStream = InjunctionDetector.class.getClassLoader().getResourceAsStream("profanity/profane_words.txt")) {
+        try (InputStream inputStream = NegativeSpeechDetector.class.getClassLoader().getResourceAsStream("profanity/profane_words.txt")) {
             if (inputStream != null) {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
                     String line;
@@ -250,7 +250,7 @@ public class InjunctionDetector {
      *
      * @param taskExecutor The {@link TaskExecutor} to run tasks asynchronously.
      */
-    public InjunctionDetector(TaskExecutor taskExecutor) {
+    public NegativeSpeechDetector(TaskExecutor taskExecutor) {
         this.taskExecutor = taskExecutor;
 
         // Configure the Stanford CoreNLP pipeline with the desired annotators.

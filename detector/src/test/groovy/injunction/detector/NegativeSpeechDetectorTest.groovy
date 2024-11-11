@@ -5,7 +5,7 @@ import spock.lang.Unroll
 import spock.util.concurrent.AsyncConditions
 
 /**
- * Test class for {@link InjunctionDetector} using the Spock framework.
+ * Test class for {@link NegativeSpeechDetector} using the Spock framework.
  *
  * <p>This class contains a comprehensive suite of test cases to validate the functionality
  * of the {@code InjunctionDetector}. The tests cover various linguistic patterns,
@@ -23,14 +23,14 @@ import spock.util.concurrent.AsyncConditions
  * <p><b>Note:</b> The test cases are designed to be both accessible to those new to programming
  * and detailed enough for experts in linguistics to appreciate the nuances of the language processing.
  */
-class InjunctionDetectorTest extends Specification {
+class NegativeSpeechDetectorTest extends Specification {
 
-    InjunctionDetector detector
+    NegativeSpeechDetector detector
     TaskExecutor executor
 
     def setup() {
         executor = new DesktopTaskExecutor()
-        detector = new InjunctionDetector(executor)
+        detector = new NegativeSpeechDetector(executor)
     }
 
     /**

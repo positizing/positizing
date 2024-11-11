@@ -6,11 +6,11 @@ evaluationDependsOn ':detector'
 
 dependencies {
     implementation project(':detector'), project(':android')
-    implementation libs.android.wearable
-
+//    implementation libs.android.wearable
+//
     implementation libs.androidx.percent
     implementation libs.androidx.recycler
-    implementation 'androidx.wear:wear:1.3.0'
+//    implementation 'androidx.wear:wear:1.3.0'
 }
 
 repositories {

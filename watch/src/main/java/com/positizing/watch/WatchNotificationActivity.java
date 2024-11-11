@@ -23,7 +23,7 @@ import android.widget.ImageButton;
 import android.widget.TextView;
 import androidx.core.app.NotificationCompat;
 import com.positizing.android.AbstractPositizingActivity;
-import injunction.detector.InjunctionDetector;
+import injunction.detector.NegativeSpeechDetector;
 
 import java.util.UUID;
 
@@ -48,7 +48,7 @@ public class WatchNotificationActivity extends AbstractPositizingActivity {
     private boolean status = true;
     private static final int RecordAudioRequestCode = 0x1001;
     private SpeechRecognizer recognizer;
-    private InjunctionDetector detector;
+    private NegativeSpeechDetector detector;
     public static final String TAG = "positizing";
     public static final String CHANNEL_ID = TAG;
     private RecognitionListener handler;

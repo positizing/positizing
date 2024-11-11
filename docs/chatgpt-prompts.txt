@@ -1,3 +1,29 @@
+I have an app I need you to create an android phone app for. The url of the project is https://github.com/positizing/positizing and the license for it is GPL 3.0, due to the use of standford core nlp libraries.
+
+We need you to create an android GUI which uses system speech recognition to listen to user's speech, process each full sentence as it is spoken, and whenever an improvement can be suggested to reduce negative speech patterns, play a notification and allows user to view suggested improvements to their speech.
+
+ Each sentence is analyzed by a Java class called NegativeSpeechDetector, which can be found at this url: https://github.com/positizing/positizing/blob/main/detector/src/main/java/injunction/detector/NegativeSpeechDetector.java
+
+ The negative speech detector is using the stanford NLP library with dependencies "edu.stanford.nlp:stanford-corenlp:4.5.7" and "edu.stanford.nlp:stanford-parser:3.9.2".
+
+
+Currently, the app will simply chime whenever an injunction is detected in the user's speech.  We need it to instead check for all forms of negative-speech detection handled by the NegativeSpeechDetector, and to additionally show suggested improvements to the user's language.  The current UI can be reused or completely replaced, at your discretion.
+
+If you need more information, please request everything you need me to provide at once.
+
+
+----------------------
+
+The existing ui is not very useful, just create something of your own.  I will provide the source for the existing AbstractPositizingActivity, where we have already sorted out some of the speech-to-text implementation.
+
+Regarding android version, we will focus on android 11.0 or later features, but would like to have the option to include legacy support up to android 8.0 in the future.
+
+Regarding style, please follow standard java conventions from the example code below.
+
+As for notification customizations, we will provide a default "chime" sound, plus the user should be able to select any system notification sound to use.  There should be a settings panel / activity where the user can set what sound, if any, to play when negative speech is detected, as well as choosing whether to vibrate or send system notifications.  We would like to have one setting for "all forms of negative speech", as well as specific examples of negative speech, such as injuctions, conjunctions and as many other forms of negative speech as you can think of.  This can allow the user to choose which negative speech patterns to work on the most.
+
+Here is the current source code for AbstractPositizingActivity:
+
 package com.positizing.android;
 
 import android.Manifest;
