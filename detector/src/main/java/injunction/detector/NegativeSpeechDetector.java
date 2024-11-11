@@ -1197,4 +1197,37 @@ public class NegativeSpeechDetector {
         }
         return sentence.substring(0, 1).toUpperCase() + sentence.substring(1);
     }
+
+    // New method to extract complete sentences
+    public SentenceExtractionResult extractCompleteSentences(String text) {
+        if (text == null || text.isEmpty()) {
+            return new SentenceExtractionResult(Collections.emptyList(), "");
+        }
+
+        Annotation document = new Annotation(text);
+        pipeline.annotate(document);
+
+        List<CoreMap> sentences = document.get(CoreAnnotations.SentencesAnnotation.class);
+        if (sentences == null || sentences.isEmpty()) {
+            return new SentenceExtractionResult(Collections.emptyList(), text);
+        }
+
+        List<String> sentenceTexts = new ArrayList<>();
+        int lastSentenceEnd = 0;
+
+        for (CoreMap sentence : sentences) {
+            int endOffset = sentence.get(CoreAnnotations.CharacterOffsetEndAnnotation.class);
+            lastSentenceEnd = endOffset;
+
+            String sentenceText = sentence.get(CoreAnnotations.TextAnnotation.class).trim();
+            sentenceTexts.add(sentenceText);
+        }
+
+        String remainingText = "";
+        if (lastSentenceEnd < text.length()) {
+            remainingText = text.substring(lastSentenceEnd);
+        }
+
+        return new SentenceExtractionResult(sentenceTexts, remainingText);
+    }
 }

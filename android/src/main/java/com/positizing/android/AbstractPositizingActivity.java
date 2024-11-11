@@ -17,8 +17,21 @@ import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 import injunction.detector.NegativeSpeechDetector;
+import injunction.detector.SentenceExtractionResult;
 
 public abstract class AbstractPositizingActivity extends Activity {
+
+    private static final int MAX_CACHE_SIZE = 128;
+
+    protected final Map<String, List<String>> suggestionsCache = Collections.synchronizedMap(
+            new LinkedHashMap<String, List<String>>(MAX_CACHE_SIZE, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry eldest) {
+                    return size() > MAX_CACHE_SIZE;
+                }
+            }
+    );
+
     public static final String TAG = "positizing";
     public static final String GOOGLE_RECOGNITION_SERVICE_NAME = "com.google.android.googlequicksearchbox/com.google.android.voicesearch.serviceapi.GoogleRecognitionService";
     private static final int RecordAudioRequestCode = 0x1001;
@@ -163,50 +176,63 @@ public abstract class AbstractPositizingActivity extends Activity {
         // Append to buffer
         sentenceBuffer.append(transcript).append(" ");
 
-        // Check if the buffer contains a full sentence
-        String bufferContent = sentenceBuffer.toString();
-        if (endsWithSentenceEnding(bufferContent)) {
-            String fullSentence = bufferContent.trim();
-            sentenceBuffer.setLength(0); // Clear the buffer
-            processFullSentence(fullSentence);
-        }
-    }
 
-    private boolean endsWithSentenceEnding(String text) {
-        // Simple check for sentence-ending punctuation
-        return text.endsWith(". ") || text.endsWith("! ") || text.endsWith("? ");
+        // Use NegativeSpeechDetector to extract complete sentences
+        SentenceExtractionResult extractionResult = detector.extractCompleteSentences(sentenceBuffer.toString());
+
+        List<String> completeSentences = extractionResult.getCompleteSentences();
+        String remainingText = extractionResult.getRemainingText();
+
+        // Update the buffer with the remaining text
+        sentenceBuffer.setLength(0);
+        sentenceBuffer.append(remainingText);
+
+        // Process each complete sentence
+        for (String sentence : completeSentences) {
+            processFullSentence(sentence);
+        }
     }
 
     private void processFullSentence(String sentence) {
         Log.i(TAG, "Processing full sentence: " + sentence);
-        // Send the sentence to NegativeSpeechDetector's asynchronous methods
-        detector.isInjunctionAsync(sentence, isInjunction -> {
-            if (isInjunction) {
-                // If an injunction is detected, get suggestions
-                List<String> suggestions = new ArrayList<>();
-                detector.suggestImprovedSentenceAsync(sentence, improvedSentence -> {
-                    if (!improvedSentence.equals(sentence)) {
-                        suggestions.add(improvedSentence);
-                    }
-                    detector.suggestInjunctionReplacementAsync(sentence, replacement -> {
-                        if (!replacement.equals(sentence) && !suggestions.contains(replacement)) {
-                            suggestions.add(replacement);
-                        }
-                        // Notify the main activity
-                        notifyUser(sentence, suggestions);
-                    });
-                });
-            } else {
-                // You can also check for conjunctions or other patterns
-                detector.suggestConjunctionReplacementAsync(sentence, replacement -> {
-                    if (!replacement.equals(sentence)) {
-                        List<String> suggestions = new ArrayList<>();
-                        suggestions.add(replacement);
-                        notifyUser(sentence, suggestions);
-                    }
-                });
+
+        // Check if the sentence is already in the cache
+        if (suggestionsCache.containsKey(sentence)) {
+            List<String> cachedSuggestions = suggestionsCache.get(sentence);
+            notifyUser(sentence, cachedSuggestions);
+            return;
+        }
+
+        // Use a thread-safe list to collect suggestions
+        List<String> suggestions = Collections.synchronizedList(new ArrayList<>());
+
+        // Suggest Improved Sentence
+        detector.suggestImprovedSentenceAsync(sentence, improvedSentence -> {
+            if (!improvedSentence.equals(sentence)) {
+                suggestions.add(improvedSentence);
+                suggestionsCache.put(sentence, new ArrayList<>(suggestions));
+                notifyUser(sentence, suggestions);
             }
         });
+
+        // Suggest Injunction Replacement
+        detector.suggestInjunctionReplacementAsync(sentence, replacement -> {
+            if (!replacement.equals(sentence)) {
+                suggestions.add(replacement);
+                suggestionsCache.put(sentence, new ArrayList<>(suggestions));
+                notifyUser(sentence, suggestions);
+            }
+        });
+
+        // Suggest Conjunction Replacement
+        detector.suggestConjunctionReplacementAsync(sentence, replacement -> {
+            if (!replacement.equals(sentence)) {
+                suggestions.add(replacement);
+                suggestionsCache.put(sentence, new ArrayList<>(suggestions));
+                notifyUser(sentence, suggestions);
+            }
+        });
+
     }
 
     private void unmute() {

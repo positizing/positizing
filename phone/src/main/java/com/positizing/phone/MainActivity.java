@@ -56,6 +56,14 @@ public class MainActivity extends AbstractPositizingActivity {
             String sentence = detectedSentences.get(position);
             List<String> suggestions = sentenceSuggestions.get(position);
 
+            // Ensure we get the latest suggestions from the cache
+            List<String> cachedSuggestions = suggestionsCache.get(sentence);
+            if (cachedSuggestions != null) {
+                suggestions = cachedSuggestions;
+                // Update the list
+                sentenceSuggestions.set(position, suggestions);
+            }
+
             Intent intent = new Intent(MainActivity.this, SuggestionsActivity.class);
             intent.putExtra("original_sentence", sentence);
             intent.putStringArrayListExtra("suggestions", new ArrayList<>(suggestions));
@@ -66,9 +74,16 @@ public class MainActivity extends AbstractPositizingActivity {
     @Override
     protected void notifyUser(final String sentence, final List<String> suggestions) {
         runOnUiThread(() -> {
-            detectedSentences.add(sentence);
-            sentenceSuggestions.add(suggestions);
-            sentencesAdapter.notifyDataSetChanged();
+            int index = detectedSentences.indexOf(sentence);
+            if (index == -1) {
+                // Sentence not in the list yet; add it
+                detectedSentences.add(sentence);
+                sentenceSuggestions.add(new ArrayList<>(suggestions));
+                sentencesAdapter.notifyDataSetChanged();
+            } else {
+                // Sentence already exists; update its suggestions
+                sentenceSuggestions.set(index, new ArrayList<>(suggestions));
+            }
         });
     }
 }

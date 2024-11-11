@@ -11,4 +11,7 @@
     <string name="detection_status_inactive">Detection Status: Inactive</string>
     <string name="original_sentence_label">Original Sentence:\n%1$s</string>
     <string name="original_sentence">Original Sentence:</string>
+    <string name="title_settings_activity">Settings</string>
+    <string name="title_suggestions_activity">Suggestions</string>
+    <string name="thanks">Got it!</string>
 </resources>
