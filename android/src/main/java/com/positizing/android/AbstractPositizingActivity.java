@@ -35,6 +35,11 @@ public abstract class AbstractPositizingActivity extends Activity {
     public static final String TAG = "positizing";
     public static final String GOOGLE_RECOGNITION_SERVICE_NAME = "com.google.android.googlequicksearchbox/com.google.android.voicesearch.serviceapi.GoogleRecognitionService";
     private static final int RecordAudioRequestCode = 0x1001;
+
+    private static final long INACTIVITY_TIMEOUT_MS = 2000; // Adjust as needed
+    private Handler inactivityHandler = new Handler();
+    private Runnable inactivityRunnable;
+
     protected SpeechRecognizer recognizer;
     protected NegativeSpeechDetector detector;
     private Intent recognizerIntent;
@@ -130,6 +135,15 @@ public abstract class AbstractPositizingActivity extends Activity {
             @Override
             public void onEndOfSpeech() {
                 Log.i(TAG, "End of speech");
+
+                // Process any remaining text in the buffer
+//                String remainingText = sentenceBuffer.toString().trim();
+//                // Note: Be cautious with this approach as onEndOfSpeech might be called frequently, depending on the speech recognizer's behavior.
+//                if (!remainingText.isEmpty()) {
+//                    Log.i(TAG, "Processing remaining buffer at end of speech: " + remainingText);
+//                    sentenceBuffer.setLength(0);
+//                    processFullSentence(remainingText);
+//                }
             }
 
             @Override
@@ -170,12 +184,11 @@ public abstract class AbstractPositizingActivity extends Activity {
         final ArrayList<String> results = bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
         if (results == null || results.isEmpty()) return;
 
-        String transcript = results.get(0).toLowerCase(Locale.ROOT);
+        String transcript = results.get(0);
         Log.i(TAG, "Transcript: " + transcript);
 
-        // Append to buffer
+        // Append recognized text to the buffer
         sentenceBuffer.append(transcript).append(" ");
-
 
         // Use NegativeSpeechDetector to extract complete sentences
         SentenceExtractionResult extractionResult = detector.extractCompleteSentences(sentenceBuffer.toString());
@@ -191,6 +204,25 @@ public abstract class AbstractPositizingActivity extends Activity {
         for (String sentence : completeSentences) {
             processFullSentence(sentence);
         }
+
+        // Reset the inactivity timer
+        resetInactivityTimer();
+    }
+
+    private void resetInactivityTimer() {
+        if (inactivityRunnable != null) {
+            inactivityHandler.removeCallbacks(inactivityRunnable);
+        }
+        inactivityRunnable = () -> {
+            // Process any remaining text in the buffer
+            String remainingText = sentenceBuffer.toString().trim();
+            if (!remainingText.isEmpty()) {
+                Log.i(TAG, "Processing remaining buffer due to inactivity: " + remainingText);
+                sentenceBuffer.setLength(0);
+                processFullSentence(remainingText);
+            }
+        };
+        inactivityHandler.postDelayed(inactivityRunnable, INACTIVITY_TIMEOUT_MS);
     }
 
     private void processFullSentence(String sentence) {

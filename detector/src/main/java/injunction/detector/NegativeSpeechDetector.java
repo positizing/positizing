@@ -1209,6 +1209,7 @@ public class NegativeSpeechDetector {
 
         List<CoreMap> sentences = document.get(CoreAnnotations.SentencesAnnotation.class);
         if (sentences == null || sentences.isEmpty()) {
+            // No complete sentences found; keep the text in the buffer
             return new SentenceExtractionResult(Collections.emptyList(), text);
         }
 
@@ -1216,11 +1217,19 @@ public class NegativeSpeechDetector {
         int lastSentenceEnd = 0;
 
         for (CoreMap sentence : sentences) {
+            int beginOffset = sentence.get(CoreAnnotations.CharacterOffsetBeginAnnotation.class);
             int endOffset = sentence.get(CoreAnnotations.CharacterOffsetEndAnnotation.class);
-            lastSentenceEnd = endOffset;
 
             String sentenceText = sentence.get(CoreAnnotations.TextAnnotation.class).trim();
-            sentenceTexts.add(sentenceText);
+
+            // Check if the sentence ends with sentence-ending punctuation
+            if (endsWithSentenceEndingPunctuation(sentenceText)) {
+                sentenceTexts.add(sentenceText);
+                lastSentenceEnd = endOffset;
+            } else {
+                // Incomplete sentence; stop processing further sentences
+                break;
+            }
         }
 
         String remainingText = "";
@@ -1229,5 +1238,10 @@ public class NegativeSpeechDetector {
         }
 
         return new SentenceExtractionResult(sentenceTexts, remainingText);
+    }
+
+    // Helper method to check for sentence-ending punctuation
+    private boolean endsWithSentenceEndingPunctuation(String text) {
+        return text.endsWith(".") || text.endsWith("!") || text.endsWith("?");
     }
 }
