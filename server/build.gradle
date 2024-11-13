@@ -1,0 +1,60 @@
+plugins {
+    id 'java-library'
+    id 'io.quarkus'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+    implementation 'io.quarkiverse.jdbc:quarkus-jdbc-sqlite:3.0.6'
+
+
+    // Quarkus Dependencies
+    implementation 'io.quarkus:quarkus-resteasy-reactive'
+    implementation 'io.quarkus:quarkus-resteasy-reactive-jackson'
+    implementation 'io.quarkus:quarkus-config-yaml'
+    implementation 'io.quarkus:quarkus-arc'
+    implementation 'io.quarkus:quarkus-caffeine'
+
+    // Hibernate ORM with Panache (Synchronous)
+    implementation 'io.quarkus:quarkus-hibernate-orm-panache'
+
+    // JSON processing
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // Vert.x Web Client for HTTP requests
+    implementation 'io.vertx:vertx-web-client'
+
+    implementation libs.json
+    implementation libs.okhttp
+
+    // Testing
+    testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.rest-assured:rest-assured'
+}
+
+group 'com.positizing'
+version '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+tasks.withType(JavaExec).configureEach {
+    JavaExec exe ->
+        exe.doFirst {
+            String apiKey = System.getenv("OPENAPI_KEY")
+            if (!apiKey) {
+                throw new GradleException("You MUST set the OPENAPI_KEY environment variable to run the server.")
+            }
+            exe.environment("OPENAI_API_KEY", apiKey)
+        }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

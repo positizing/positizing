@@ -7,9 +7,10 @@ evaluationDependsOn ':detector'
 dependencies {
     implementation project(':detector'), project(':android')
 //    implementation libs.android.wearable
-//
-    implementation libs.androidx.percent
-    implementation libs.androidx.recycler
+////
+//    implementation libs.androidx.percent
+//    implementation libs.androidx.recycler
+    implementation libs.androidx.appcompat
 //    implementation 'androidx.wear:wear:1.3.0'
 }
 
@@ -26,6 +27,7 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "OPENAPI_KEY", "\"${System.env.OPENAPI_KEY}\""
     }
     packagingOptions { resources.merges.add( "simplelogger.properties" ) }
     buildTypes {
@@ -33,6 +35,12 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+    buildFeatures.buildConfig true
+}
+configurations.all {
+    resolutionStrategy {
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
     }
 }
 //
