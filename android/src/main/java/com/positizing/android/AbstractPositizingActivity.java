@@ -13,10 +13,15 @@ import android.speech.*;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
+
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import injunction.detector.NegativeSpeechDetector;
+import injunction.detector.NegativeSpeechRephraser;
 import injunction.detector.SentenceExtractionResult;
 
 public abstract class AbstractPositizingActivity extends Activity {
@@ -36,7 +41,7 @@ public abstract class AbstractPositizingActivity extends Activity {
     public static final String GOOGLE_RECOGNITION_SERVICE_NAME = "com.google.android.googlequicksearchbox/com.google.android.voicesearch.serviceapi.GoogleRecognitionService";
     private static final int RecordAudioRequestCode = 0x1001;
 
-    private static final long INACTIVITY_TIMEOUT_MS = 2000; // Adjust as needed
+    private static final long INACTIVITY_TIMEOUT_MS = 1500; // Adjust as needed
     private Handler inactivityHandler = new Handler();
     private Runnable inactivityRunnable;
 
@@ -50,6 +55,7 @@ public abstract class AbstractPositizingActivity extends Activity {
     private StringBuilder sentenceBuffer = new StringBuilder();
     private Queue<String> pendingSentences = new ConcurrentLinkedQueue<>();
     private Handler mainHandler;
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
     protected void prepareDetector() {
         detector = new NegativeSpeechDetector(new AndroidTaskExecutor());
@@ -81,101 +87,102 @@ public abstract class AbstractPositizingActivity extends Activity {
 
     protected void setupSpeechRecognizer() {
         if (recognizer != null) {
-            recognizer.destroy();
-        }
-        recognizer = null;
+            recognizer.stopListening();
+            recognizer.cancel();
+        } else {
 
-        audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        ComponentName recognizerServiceComponent = ComponentName.unflattenFromString(GOOGLE_RECOGNITION_SERVICE_NAME);
-        PackageManager pm = getPackageManager();
+            audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            ComponentName recognizerServiceComponent = ComponentName.unflattenFromString(GOOGLE_RECOGNITION_SERVICE_NAME);
+            PackageManager pm = getPackageManager();
 
-        try {
-            pm.getServiceInfo(recognizerServiceComponent, PackageManager.GET_META_DATA);
-            // Google recognition service is available
-            recognizer = SpeechRecognizer.createSpeechRecognizer(getApplicationContext(), recognizerServiceComponent);
-            Log.i(TAG, "Using Google recognition service.");
-        } catch (PackageManager.NameNotFoundException e) {
-            // Google recognition service not available, use default
-            recognizer = SpeechRecognizer.createSpeechRecognizer(getApplicationContext());
-            Log.i(TAG, "Google recognition service not found. Using default service.");
-        }
-        mStreamVolume = audio.getStreamVolume(DING_STREAM);
-        audio.adjustStreamVolume(DING_STREAM, AudioManager.ADJUST_MUTE, 0);
-
-        recognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        recognizerIntent.putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-        );
-        recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US");
-
-        recognizer.setRecognitionListener(new RecognitionListener() {
-            @Override
-            public void onReadyForSpeech(Bundle params) {
-                Log.i(TAG, "ready for speech");
-                performingSpeechSetup = false;
-                unmute();
+            try {
+                pm.getServiceInfo(recognizerServiceComponent, PackageManager.GET_META_DATA);
+                // Google recognition service is available
+                recognizer = SpeechRecognizer.createSpeechRecognizer(getApplicationContext(), recognizerServiceComponent);
+                Log.i(TAG, "Using Google recognition service.");
+            } catch (PackageManager.NameNotFoundException e) {
+                // Google recognition service not available, use default
+                recognizer = SpeechRecognizer.createSpeechRecognizer(getApplicationContext());
+                Log.i(TAG, "Google recognition service not found. Using default service.");
             }
+            mStreamVolume = audio.getStreamVolume(DING_STREAM);
+            audio.adjustStreamVolume(DING_STREAM, AudioManager.ADJUST_MUTE, 0);
 
-            @Override
-            public void onBeginningOfSpeech() {
-                Log.i(TAG, "beginning of speech");
-            }
+            recognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            recognizerIntent.putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            );
+            recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US");
 
-            @Override
-            public void onRmsChanged(float rmsdB) {
-                // Optional: Implement if you need audio level feedback
-            }
-
-            @Override
-            public void onBufferReceived(byte[] buffer) {
-                Log.i(TAG, "buffer received");
-            }
-
-            @Override
-            public void onEndOfSpeech() {
-                Log.i(TAG, "End of speech");
-
-                // Process any remaining text in the buffer
-//                String remainingText = sentenceBuffer.toString().trim();
-//                // Note: Be cautious with this approach as onEndOfSpeech might be called frequently, depending on the speech recognizer's behavior.
-//                if (!remainingText.isEmpty()) {
-//                    Log.i(TAG, "Processing remaining buffer at end of speech: " + remainingText);
-//                    sentenceBuffer.setLength(0);
-//                    processFullSentence(remainingText);
-//                }
-            }
-
-            @Override
-            public void onError(int error) {
-                if (performingSpeechSetup && error == SpeechRecognizer.ERROR_NO_MATCH) {
-                    Log.w(TAG, "Ignoring startup error");
+            recognizer.setRecognitionListener(new RecognitionListener() {
+                @Override
+                public void onReadyForSpeech(Bundle params) {
+                    Log.i(TAG, "ready for speech");
+                    performingSpeechSetup = false;
                     unmute();
-                    return;
                 }
-                if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
-                    return;
+
+                @Override
+                public void onBeginningOfSpeech() {
+                    Log.i(TAG, "beginning of speech");
                 }
-                Log.i(TAG, "onError: " + error);
-                startSpeechRecognition();
-            }
 
-            @Override
-            public void onResults(Bundle results) {
-                processResults(results);
-                startSpeechRecognition();
-            }
+                @Override
+                public void onRmsChanged(float rmsdB) {
+                    // Optional: Implement if you need audio level feedback
+                }
 
-            @Override
-            public void onPartialResults(Bundle partialResults) {
-                processResults(partialResults);
-            }
+                @Override
+                public void onBufferReceived(byte[] buffer) {
+                    Log.i(TAG, "buffer received");
+                }
 
-            @Override
-            public void onEvent(int eventType, Bundle params) {
-                Log.i(TAG, "event: " + eventType);
-            }
-        });
+                @Override
+                public void onEndOfSpeech() {
+                    Log.i(TAG, "End of speech");
+
+                    // Process any remaining text in the buffer
+    //                String remainingText = sentenceBuffer.toString().trim();
+    //                // Note: Be cautious with this approach as onEndOfSpeech might be called frequently, depending on the speech recognizer's behavior.
+    //                if (!remainingText.isEmpty()) {
+    //                    Log.i(TAG, "Processing remaining buffer at end of speech: " + remainingText);
+    //                    sentenceBuffer.setLength(0);
+    //                    processFullSentence(remainingText);
+    //                }
+                }
+
+                @Override
+                public void onError(int error) {
+                    if (performingSpeechSetup && error == SpeechRecognizer.ERROR_NO_MATCH) {
+                        Log.w(TAG, "Ignoring startup error");
+                        unmute();
+                        return;
+                    }
+                    if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
+                        return;
+                    }
+                    Log.i(TAG, "onError: " + error);
+                    startSpeechRecognition();
+                }
+
+                @Override
+                public void onResults(Bundle results) {
+                    processResults(results);
+                    startSpeechRecognition();
+                }
+
+                @Override
+                public void onPartialResults(Bundle partialResults) {
+                    processResults(partialResults);
+                }
+
+                @Override
+                public void onEvent(int eventType, Bundle params) {
+                    Log.i(TAG, "event: " + eventType);
+                }
+            });
+        }
 
         startSpeechRecognition();
     }
@@ -239,31 +246,43 @@ public abstract class AbstractPositizingActivity extends Activity {
         List<String> suggestions = Collections.synchronizedList(new ArrayList<>());
 
         // Suggest Improved Sentence
-        detector.suggestImprovedSentenceAsync(sentence, improvedSentence -> {
-            if (!improvedSentence.equals(sentence)) {
-                suggestions.add(improvedSentence);
-                suggestionsCache.put(sentence, new ArrayList<>(suggestions));
-                notifyUser(sentence, suggestions);
-            }
+//        detector.suggestImprovedSentenceAsync(sentence, improvedSentence -> {
+//            if (!improvedSentence.equals(sentence)) {
+//                suggestions.add(improvedSentence);
+//                suggestionsCache.put(sentence, new ArrayList<>(suggestions));
+//                notifyUser(sentence, suggestions);
+//            }
+//        });
+//
+//        // Suggest Injunction Replacement
+//        detector.suggestInjunctionReplacementAsync(sentence, replacement -> {
+//            if (!replacement.equals(sentence)) {
+//                suggestions.add(replacement);
+//                suggestionsCache.put(sentence, new ArrayList<>(suggestions));
+//                notifyUser(sentence, suggestions);
+//            }
+//        });
+//
+//        // Suggest Conjunction Replacement
+//        detector.suggestConjunctionReplacementAsync(sentence, replacement -> {
+//            if (!replacement.equals(sentence)) {
+//                suggestions.add(replacement);
+//                suggestionsCache.put(sentence, new ArrayList<>(suggestions));
+//                notifyUser(sentence, suggestions);
+//            }
+//        });
+        detector.needsReplacement(sentence, ()-> {
+            executorService.execute(() -> {
+                List<String> replacement;
+                try {
+                    replacement = NegativeSpeechRephraser.rephraseNegativeSpeech(sentence);
+                    notifyUser(sentence, replacement);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
         });
 
-        // Suggest Injunction Replacement
-        detector.suggestInjunctionReplacementAsync(sentence, replacement -> {
-            if (!replacement.equals(sentence)) {
-                suggestions.add(replacement);
-                suggestionsCache.put(sentence, new ArrayList<>(suggestions));
-                notifyUser(sentence, suggestions);
-            }
-        });
-
-        // Suggest Conjunction Replacement
-        detector.suggestConjunctionReplacementAsync(sentence, replacement -> {
-            if (!replacement.equals(sentence)) {
-                suggestions.add(replacement);
-                suggestionsCache.put(sentence, new ArrayList<>(suggestions));
-                notifyUser(sentence, suggestions);
-            }
-        });
 
     }
 

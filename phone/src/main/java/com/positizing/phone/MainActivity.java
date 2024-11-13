@@ -3,6 +3,7 @@ package com.positizing.phone;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.*;
+import androidx.core.os.BundleCompat;
 import com.positizing.android.AbstractPositizingActivity;
 
 import java.util.*;
@@ -21,6 +22,7 @@ public class MainActivity extends AbstractPositizingActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        System.setProperty("OPENAPI_KEY", BundleCompat.getParcelable(savedInstanceState, "OPENAPI_KEY", String.class));
         super.onCreate(savedInstanceState);
         setContentView(R.layout.positizing_main);
         prepareDetector();

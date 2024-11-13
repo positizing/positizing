@@ -5,6 +5,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -83,8 +84,11 @@ public class NegativeSpeechRephraser {
                     .getString("content")
                     .trim();
             JSONArray results = new JSONArray(rephrasedText.replaceAll("```?(json\\n)", ""));
-            //noinspection unchecked,rawtypes
-            return (List<String>)((List)results.toList());
+            List<String> list = new ArrayList<>();
+            for (int i = 0 ; i < results.length(); i++ ) {
+                list.add(results.getString(i));
+            }
+            return list;
         } else {
             String errorBody = response.body().string();
             System.err.println("Error response: " + errorBody);

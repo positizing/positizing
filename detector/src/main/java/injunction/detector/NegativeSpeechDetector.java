@@ -9,6 +9,7 @@ import edu.stanford.nlp.util.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
@@ -103,6 +104,7 @@ public class NegativeSpeechDetector {
 
     /** Precompiled pattern to detect sentence-ending punctuation. */
     private static final Pattern SENTENCE_ENDING_PUNCTUATION_PATTERN = Pattern.compile("[.!?]$");
+    private static final Runnable DO_NOTHING = ()->{};
 
     static {
         // Initialize negation mappings (e.g., "can't" -> "can").
@@ -240,7 +242,7 @@ public class NegativeSpeechDetector {
     }
 
     /** Executor for running tasks asynchronously. */
-    private final TaskExecutor taskExecutor;
+    public final TaskExecutor taskExecutor;
 
     /** Stanford CoreNLP pipeline for text annotation. */
     private final StanfordCoreNLP pipeline;
@@ -667,6 +669,40 @@ public class NegativeSpeechDetector {
             // Return the original message if no conjunction is found
             return message;
         }
+    }
+    public boolean hasConjunction(final String message) {
+        Annotation document = new Annotation(message);
+        pipeline.annotate(document);
+
+        List<CoreMap> sentences = document.get(CoreAnnotations.SentencesAnnotation.class);
+        StringBuilder result = new StringBuilder();
+
+        boolean conjunctionFound = false;
+
+        for (CoreMap sentence : sentences) {
+            List<CoreLabel> tokens = sentence.get(CoreAnnotations.TokensAnnotation.class);
+            StringBuilder sentenceBuilder = new StringBuilder();
+
+            for (CoreLabel token : tokens) {
+                String word = token.originalText();
+                String lowerWord = word.toLowerCase(Locale.ROOT);
+
+                if (CONJUNCTION_MATCH_SET.contains(lowerWord)) {
+                    // Replace "but" with "and"
+                    sentenceBuilder.append("and");
+                    return true;
+                } else {
+                    // Keep the original word
+                    sentenceBuilder.append(word);
+                }
+                // Append whitespace
+                sentenceBuilder.append(token.after());
+            }
+            String modifiedSentence = sentenceBuilder.toString().trim();
+            result.append(modifiedSentence);
+            result.append(" ");
+        }
+        return false;
     }
 
     /**
@@ -1243,5 +1279,24 @@ public class NegativeSpeechDetector {
     // Helper method to check for sentence-ending punctuation
     private boolean endsWithSentenceEndingPunctuation(String text) {
         return text.endsWith(".") || text.endsWith("!") || text.endsWith("?");
+    }
+
+    public void needsReplacement(final String sentence, final Runnable ifNeeded) {
+        AtomicReference<Runnable> once = new AtomicReference<>(ifNeeded);
+        taskExecutor.execute(() -> {
+            if (isInjunction(sentence)) {
+                once.getAndSet(DO_NOTHING).run();
+            }
+        });
+        taskExecutor.execute(() -> {
+            if (detectNotOnlyButAlsoPattern(sentence)) {
+                once.getAndSet(DO_NOTHING).run();
+            }
+        });
+        taskExecutor.execute(() -> {
+            if (hasConjunction(sentence)) {
+                once.getAndSet(DO_NOTHING).run();
+            }
+        });
     }
 }

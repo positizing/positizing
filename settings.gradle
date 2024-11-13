@@ -13,7 +13,7 @@ pluginManagement {
 rootProject.name = 'positizing'
 
 List<String> modules = [
-        ':detector', ':android', ':watch', ':phone'
+        ':detector', ':android', ':watch', ':phone', ':server'
 ]
 modules.each { m ->
     include m

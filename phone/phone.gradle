@@ -27,6 +27,7 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "OPENAPI_KEY", "\"${System.env.OPENAPI_KEY}\""
     }
     packagingOptions { resources.merges.add( "simplelogger.properties" ) }
     buildTypes {
@@ -35,6 +36,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+    buildFeatures.buildConfig true
 }
 configurations.all {
     resolutionStrategy {
