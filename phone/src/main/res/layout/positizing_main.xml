@@ -1,58 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.wear.widget.BoxInsetLayout xmlns:android="http://schemas.android.com/apk/res/android"
-                                     xmlns:app="http://schemas.android.com/apk/res-auto"
-                                     xmlns:tools="http://schemas.android.com/tools"
-                                     android:layout_width="match_parent"
-                                     android:layout_height="match_parent"
-                                     android:padding="@dimen/box_inset_layout_padding"
-                                     tools:context="com.positizing.phone.PhonePositizingActivity"
-                                     tools:deviceIds="wear">
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                android:id="@+id/main_activity_layout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
 
-    <FrameLayout
+    <!-- Settings Button -->
+    <ImageButton
+            android:id="@+id/settings_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_margin="16dp"
+            android:contentDescription="@string/settings"
+            android:src="@drawable/ic_settings_gear" />
+
+    <!-- Status TextView -->
+    <TextView
+            android:id="@+id/status_text_view"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/detection_status_inactive"
+            android:textSize="18sp"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="16dp" />
+
+    <!-- Start Button -->
+    <Button
+            android:id="@+id/start_button"
+            android:layout_width="120dp"
+            android:layout_height="wrap_content"
+            android:text="@string/start"
+            android:layout_below="@id/status_text_view"
+            android:layout_marginTop="16dp"
+            android:layout_alignParentStart="true"
+            android:layout_marginStart="32dp" />
+
+    <!-- Stop Button -->
+    <Button
+            android:id="@+id/stop_button"
+            android:layout_width="120dp"
+            android:layout_height="wrap_content"
+            android:text="@string/stop"
+            android:layout_below="@id/status_text_view"
+            android:layout_marginTop="16dp"
+            android:layout_alignParentEnd="true"
+            android:layout_marginEnd="32dp" />
+
+    <!-- Sentences ListView -->
+    <ListView
+            android:id="@+id/sentences_list_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:padding="@dimen/inner_frame_layout_padding">
+            android:layout_below="@id/start_button"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp" />
 
-        <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical">
-
-            <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
-
-                <Button
-                        android:id="@+id/startButton"
-                        android:layout_width="200dp"
-                        android:layout_height="48dp"
-                        android:src="@drawable/ok"
-                        android:text="@string/start"
-                        android:contentDescription="@string/ok"/>
-
-                <Button
-                        android:id="@+id/stopButton"
-                        android:layout_width="200dp"
-                        android:layout_height="48dp"
-                        android:src="@drawable/ok"
-                        android:text="@string/stop"
-                        android:contentDescription="@string/stop"
-                        />
-            </LinearLayout>
-            <androidx.core.widget.NestedScrollView
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    >
-                <LinearLayout
-                        android:id="@+id/resultsPanel"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:orientation="vertical" />
-            </androidx.core.widget.NestedScrollView>
-        </LinearLayout>
-
-
-    </FrameLayout>
-
-</androidx.wear.widget.BoxInsetLayout>
+</RelativeLayout>
