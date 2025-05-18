@@ -1,4 +1,4 @@
-package com.positizing.server;
+package com.positizing.server.data;
 
 
 import io.quarkus.hibernate.orm.panache.PanacheEntity;

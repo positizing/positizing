@@ -1,5 +1,7 @@
 package com.positizing.server;
 
+import com.positizing.server.data.CacheEntry;
+import com.positizing.server.endpoints.VoteResource;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.vertx.core.Future;
@@ -10,6 +12,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.logging.Logger;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,6 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @ApplicationScoped
 public class OpenAPIService {
 
+    private static final Logger log = Logger.getLogger(OpenAPIService.class);
+
     @ConfigProperty(name = "openai.api.key")
     String openaiApiKey;
 
@@ -37,7 +42,7 @@ public class OpenAPIService {
         // First, check in-memory cache
         String cachedResponse = inMemoryCache.get(prompt);
         if (cachedResponse != null) {
-            System.out.println("Returning cached response: " + cachedResponse);
+            System.out.println("Returning cached response: " + cachedResponse + " from prompt: " + prompt);
             return Uni.createFrom().item(cachedResponse);
         }
 
