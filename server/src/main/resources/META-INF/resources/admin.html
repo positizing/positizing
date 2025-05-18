@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Positizing Cache Admin</title>
+    <style>
+        body { font-family: sans-serif; margin: 1rem; }
+        h1 { margin-bottom: 0.5rem; }
+        .controls { margin-bottom: 1rem; }
+        details { margin-bottom: 0.5rem; }
+        summary { cursor: pointer; font-weight: bold; }
+        .suggestion { margin-left: 1.5rem; display: flex; align-items: center; }
+        .suggestion span { flex: 1; }
+        button.feedback { margin-left: 0.5rem; cursor: pointer; }
+    </style>
+</head>
+<body>
+<h1>Positizing Cache Admin</h1>
+<div class="controls">
+    <label for="cacheType">Cache:</label>
+    <select id="cacheType">
+        <option value="db">Database</option>
+        <option value="memory">In-Memory</option>
+    </select>
+
+    <label for="orderBy" style="margin-left:1rem;">Order by:</label>
+    <select id="orderBy">
+        <option value="time">Time Added</option>
+        <option value="alpha">Alphabetical</option>
+    </select>
+
+    <button id="reload">Reload</button>
+</div>
+
+<div id="tree"></div>
+
+<script>
+    let dbEntries = [];
+    let memoryEntries = [];
+
+    // fetch both caches
+    async function fetchCaches() {
+        const [dbRes, memRes] = await Promise.all([
+            fetch('/cache/db').then(r => r.json()),
+            fetch('/cache/memory').then(r => r.json())
+        ]);
+
+        // dbRes is array of {prompt, response}
+        dbEntries = dbRes.map((e, idx) => ({
+            prompt: e.prompt,
+            response: e.response,
+            index: idx
+        }));
+
+        // memory is object map => convert to array
+        memoryEntries = Object.entries(memRes).map(([prompt, response], idx) => ({
+            prompt, response, index: idx
+        }));
+
+        render();
+    }
+
+    // render tree based on current controls
+    function render() {
+        const cacheType = document.getElementById('cacheType').value;
+        const orderBy   = document.getElementById('orderBy').value;
+        const container = document.getElementById('tree');
+        container.innerHTML = '';
+
+        const data = cacheType === 'db' ? dbEntries.slice() : memoryEntries.slice();
+
+        if (orderBy === 'alpha') {
+            data.sort((a, b) => a.prompt.localeCompare(b.prompt));
+        } else {
+            // time = original insertion order by index
+            data.sort((a, b) => a.index - b.index);
+        }
+
+        data.forEach(entry => {
+            const details = document.createElement('details');
+            const summary = document.createElement('summary');
+            summary.textContent = entry.prompt;
+            details.appendChild(summary);
+
+            // split response by lines for multiple suggestions
+            const lines = entry.response.split(/\r?\n/).filter(l => l.trim());
+            lines.forEach(line => {
+                const div = document.createElement('div');
+                div.className = 'suggestion';
+                const span = document.createElement('span');
+                span.textContent = line;
+                div.appendChild(span);
+
+                // thumbs up button
+                const up = document.createElement('button');
+                up.className = 'feedback';
+                up.textContent = '👍';
+                up.title = 'Thumbs Up';
+                up.onclick = () => console.log('Upvote:', entry.prompt, line);
+                div.appendChild(up);
+
+                // thumbs down button
+                const down = document.createElement('button');
+                down.className = 'feedback';
+                down.textContent = '👎';
+                down.title = 'Thumbs Down';
+                down.onclick = () => console.log('Downvote:', entry.prompt, line);
+                div.appendChild(down);
+
+                details.appendChild(div);
+            });
+
+            container.appendChild(details);
+        });
+    }
+
+    // wire controls
+    document.getElementById('cacheType').addEventListener('change', render);
+    document.getElementById('orderBy').addEventListener('change', render);
+    document.getElementById('reload').addEventListener('click', fetchCaches);
+
+    // initial load
+    fetchCaches();
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "timeZone": "America/Regina",
+  "exceptionLogging": "STACKDRIVER",
+
+  "addOns": {
+    "common": {
+      "name": "Positizing",
+      "logoUrl": "https://positizing.com/logo.png"
+    },
+    "docs": {
+      "homepageTrigger": {
+        "runFunction": "onHomePage",
+        "enabled": true
+      }
+    }
+  },
+
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/documents",
+    "https://www.googleapis.com/auth/documents.currentonly",
+    "https://www.googleapis.com/auth/script.container.ui",
+    "https://www.googleapis.com/auth/script.external_request"
+  ],
+
+  "urlFetchWhitelist": [
+    "https://positizing.com/api"
+  ]
+}
