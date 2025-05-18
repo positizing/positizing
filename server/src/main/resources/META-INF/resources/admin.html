@@ -8,105 +8,141 @@
         body { font-family: sans-serif; margin: 1rem; }
         h1 { margin-bottom: 0.5rem; }
         .controls { margin-bottom: 1rem; }
+        .controls label { margin-right: 1rem; }
         details { margin-bottom: 0.5rem; }
         summary { cursor: pointer; font-weight: bold; }
         .suggestion { margin-left: 1.5rem; display: flex; align-items: center; }
         .suggestion span { flex: 1; }
         button.feedback { margin-left: 0.5rem; cursor: pointer; }
+        .paging { margin-top: 1rem; }
+        .paging button { margin: 0 0.5rem; }
     </style>
 </head>
 <body>
 <h1>Positizing Cache Admin</h1>
 <div class="controls">
+    <!-- Cache type and ordering -->
     <label for="cacheType">Cache:</label>
     <select id="cacheType">
         <option value="db">Database</option>
         <option value="memory">In-Memory</option>
     </select>
 
-    <label for="orderBy" style="margin-left:1rem;">Order by:</label>
+    <label for="orderBy">Order by:</label>
     <select id="orderBy">
         <option value="time">Time Added</option>
         <option value="alpha">Alphabetical</option>
     </select>
 
     <button id="reload">Reload</button>
+
+    <!-- Filters -->
+    <label><input type="checkbox" id="showWithResults" checked> Show entries with results</label>
+    <label><input type="checkbox" id="showNoResults" checked> Show entries with no results</label>
+
+    <!-- Page size control -->
+    <label for="pageSize">Page Size:</label>
+    <select id="pageSize">
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="50">50</option>
+    </select>
 </div>
 
 <div id="tree"></div>
 
-<script>
-    let dbEntries = [];
-    let memoryEntries = [];
+<div class="paging">
+    <button id="prevPage">&laquo; Prev</button>
+    Page <span id="pageNum">1</span> of <span id="pageCount">1</span>
+    <button id="nextPage">Next &raquo;</button>
+</div>
 
-    // fetch both caches
+<script>
+    let dbEntries = [], memoryEntries = [];
+    let currentPage = 0;
+
+    // Fetch caches from server
     async function fetchCaches() {
         const [dbRes, memRes] = await Promise.all([
             fetch('/cache/db').then(r => r.json()),
             fetch('/cache/memory').then(r => r.json())
         ]);
 
-        // dbRes is array of {prompt, response}
-        dbEntries = dbRes.map((e, idx) => ({
-            prompt: e.prompt,
-            response: e.response,
-            index: idx
-        }));
+        dbEntries = dbRes.map((e, i) => ({ prompt: e.prompt, response: e.response, index: i }));
+        memoryEntries = Object.entries(memRes).map(([prompt, response], i) => ({ prompt, response, index: i }));
 
-        // memory is object map => convert to array
-        memoryEntries = Object.entries(memRes).map(([prompt, response], idx) => ({
-            prompt, response, index: idx
-        }));
-
+        currentPage = 0;
         render();
     }
 
-    // render tree based on current controls
     function render() {
         const cacheType = document.getElementById('cacheType').value;
         const orderBy   = document.getElementById('orderBy').value;
+        const showWith  = document.getElementById('showWithResults').checked;
+        const showNo    = document.getElementById('showNoResults').checked;
+        const pageSize  = parseInt(document.getElementById('pageSize').value, 10);
         const container = document.getElementById('tree');
         container.innerHTML = '';
 
-        const data = cacheType === 'db' ? dbEntries.slice() : memoryEntries.slice();
+        // Prepare data copy
+        let data = (cacheType === 'db' ? dbEntries : memoryEntries).slice();
 
+        // Apply ordering
         if (orderBy === 'alpha') {
             data.sort((a, b) => a.prompt.localeCompare(b.prompt));
         } else {
-            // time = original insertion order by index
             data.sort((a, b) => a.index - b.index);
         }
 
-        data.forEach(entry => {
+        // Filter based on results existence
+        data = data.filter(entry => {
+            const trimmed = entry.response.trim();
+            // Treat literal JSON empty array or blank as no results
+            const isEmptyArray = /^\[\s*\]$/.test(trimmed);
+            const hasResults = trimmed !== '' && !isEmptyArray;
+            return (hasResults && showWith) || (!hasResults && showNo);
+        });
+
+        // Compute pagination
+        const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
+        currentPage = Math.min(currentPage, totalPages - 1);
+        const start = currentPage * pageSize;
+        const pageData = data.slice(start, start + pageSize);
+
+        // Update paging display
+        document.getElementById('pageNum').textContent = currentPage + 1;
+        document.getElementById('pageCount').textContent = totalPages;
+        document.getElementById('prevPage').disabled = currentPage === 0;
+        document.getElementById('nextPage').disabled = currentPage === totalPages - 1;
+
+        // Render entries on current page
+        pageData.forEach(entry => {
             const details = document.createElement('details');
             const summary = document.createElement('summary');
-            summary.textContent = entry.prompt;
+
+            // Extract only user sentence
+            let displayPrompt = entry.prompt;
+            const m = entry.prompt.match(/Sentence:\s*"([^"]+)"/);
+            if (m) displayPrompt = m[1];
+            summary.textContent = displayPrompt;
             details.appendChild(summary);
 
-            // split response by lines for multiple suggestions
-            const lines = entry.response.split(/\r?\n/).filter(l => l.trim());
-            lines.forEach(line => {
+            // Render suggestions
+            entry.response.split(/\r?\n/).filter(l => l.trim()).forEach(line => {
                 const div = document.createElement('div');
                 div.className = 'suggestion';
                 const span = document.createElement('span');
                 span.textContent = line;
                 div.appendChild(span);
 
-                // thumbs up button
-                const up = document.createElement('button');
-                up.className = 'feedback';
-                up.textContent = '👍';
-                up.title = 'Thumbs Up';
-                up.onclick = () => console.log('Upvote:', entry.prompt, line);
-                div.appendChild(up);
-
-                // thumbs down button
-                const down = document.createElement('button');
-                down.className = 'feedback';
-                down.textContent = '👎';
-                down.title = 'Thumbs Down';
-                down.onclick = () => console.log('Downvote:', entry.prompt, line);
-                div.appendChild(down);
+                ['👍','👎'].forEach(symbol => {
+                    const btn = document.createElement('button');
+                    btn.className = 'feedback';
+                    btn.textContent = symbol;
+                    btn.title = symbol === '👍' ? 'Thumbs Up' : 'Thumbs Down';
+                    btn.onclick = () => console.log(symbol === '👍' ? 'Upvote' : 'Downvote', displayPrompt, line);
+                    div.appendChild(btn);
+                });
 
                 details.appendChild(div);
             });
@@ -115,12 +151,15 @@
         });
     }
 
-    // wire controls
-    document.getElementById('cacheType').addEventListener('change', render);
-    document.getElementById('orderBy').addEventListener('change', render);
+    // Wiring controls
+    ['cacheType','orderBy','showWithResults','showNoResults','pageSize'].forEach(id =>
+        document.getElementById(id).addEventListener('change', () => { currentPage = 0; render(); })
+    );
     document.getElementById('reload').addEventListener('click', fetchCaches);
+    document.getElementById('prevPage').addEventListener('click', () => { currentPage--; render(); });
+    document.getElementById('nextPage').addEventListener('click', () => { currentPage++; render(); });
 
-    // initial load
+    // Initial load
     fetchCaches();
 </script>
 </body>

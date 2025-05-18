@@ -83,6 +83,7 @@ public class OpenAPIController {
                         "- Replace words like \"don't\", \"isn't\", \"can't\", \"not\", \"try\", and \"should.\"\n" +
                         "- Encourage ownership of feelings by avoiding phrases like \"You make me feel...\" and instead using \"I feel [emotion word]...\"\n" +
                         "- Replace \"I feel that...\" with \"I feel [emotion word]...\"\n" +
+                        "- If the original statement must deal with negative concepts, it should maintain the original intent, but use more positive language constructs\n" +
                         "Also, correct common misspellings such as \"wont\" for \"won't\" or \"dn't\" for \"don't\".\n" +
                         "Make sure responses avoid the use of injunctions or other negative speech patterns as much as possible.\n\n" +
                         "Sentence: \"%s\"\n\n" +
