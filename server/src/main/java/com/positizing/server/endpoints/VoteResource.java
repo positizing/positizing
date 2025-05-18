@@ -7,8 +7,8 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
+import org.jboss.resteasy.reactive.RestResponse;
 
 /// VoteResource: handles feedback (votes) from users on suggestions.
 ///
@@ -16,51 +16,55 @@ import org.jboss.logging.Logger;
 /// - POST /cache/vote to record a thumbs-up or thumbs-down
 ///
 /// Created by James X. Nelson (James@WeTheInter.net) on 17/05/2025 @ 21:46
-@Path("/cache")
 @ApplicationScoped
+@Path("/cache")
 public class VoteResource {
-
     private static final Logger log = Logger.getLogger(VoteResource.class);
 
-    /// Data class representing the incoming JSON payload for a vote
     public static class VoteRequest {
-        /// The original text prompt
         public String prompt;
-        /// The suggestion that was voted on
         public String suggestion;
-        /// +1 for thumbs-up, -1 for thumbs-down
-        public int vote;
-        /// Anonymous session token
+        public int vote;   // +1, -1, or 0
         public String token;
-        /// User-agent string
         public String ua;
     }
 
-    /// Record a user vote for a suggestion
-    ///
-    /// @param req VoteRequest JSON payload
-    /// @return HTTP 204 No Content on success
+    /**
+     /// POST /cache/vote
+     ///
+     /// If vote==0: delete any existing VoteEntry for this user/prompt/suggestion.
+     /// Else: persist a new VoteEntry.
+     ///
+     /// Returns 204 No Content.
+     */
     @POST
     @Path("/vote")
     @Consumes(MediaType.APPLICATION_JSON)
     @Transactional
-    public Response vote(VoteRequest req) {
-        // Log the incoming vote details
-        log.infof("Received vote: prompt='%s', suggestion='%s', vote=%d, token='%s', ua='%s'",
-                req.prompt, req.suggestion, req.vote, req.token, req.ua);
+    public RestResponse<Void> vote(VoteRequest req) {
+        log.infof("Vote request: prompt=%s suggestion=%s vote=%d token=%s",
+                req.prompt, req.suggestion, req.vote, req.token);
 
-        // Persist the vote entry
-        VoteEntry entry = new VoteEntry(
-                req.prompt,
-                req.suggestion,
-                req.vote,
-                req.token,
-                req.ua
-        );
-        entry.persist();
+        if (req.vote == 0) {
+            // delete existing
+            long deleted = VoteEntry.delete(
+                    "prompt = ?1 and suggestion = ?2 and token = ?3",
+                    req.prompt, req.suggestion, req.token
+            );
+            log.debugf("Deleted %d vote entries", deleted);
+        } else {
+            // persist new
+            VoteEntry entry = new VoteEntry(
+                    req.prompt,
+                    req.suggestion,
+                    req.vote,
+                    req.token,
+                    req.ua
+            );
+            entry.persist();
+            log.debugf("Persisted VoteEntry id=%d", entry.id);
+        }
 
-        log.debugf("Vote persisted with id %d", entry.id);
-        return Response.noContent().build();
+        return RestResponse.noContent();
     }
 }
-

@@ -1,16 +1,25 @@
 package com.positizing.server;
 
 import com.positizing.server.data.VoteEntry;
+import injunction.detector.NegativeSpeechDetector;
+import injunction.detector.SentenceExtractionResult;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import jakarta.inject.Inject;
+import jakarta.json.Json;
+import jakarta.json.JsonArray;
+import jakarta.json.JsonReader;
+import jakarta.json.JsonString;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
+import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.RestResponse;
 
+import java.io.StringReader;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -23,32 +32,136 @@ import java.util.stream.Collectors;
 @Consumes(MediaType.APPLICATION_JSON)
 public class OpenAPIController {
 
+    private static final Logger log = Logger.getLogger(OpenAPIController.class);
+
     @Inject
     OpenAPIService openAIService;
 
-    /// DTO matching client-side JSON payload
+    @Inject
+    NegativeSpeechDetector detector;
+
+    /**
+     * Client payload for rephrase requests.
+     */
     public static class InputRequest {
         public String prompt;
         public String token;
         public String ua;
+        public boolean force;
     }
 
-    /// POST /api/rephrase
-    /// - Offloads vote lookup and prompt construction to a worker thread
-    /// - Calls OpenAIService with the enriched prompt
+
+    /**
+     * Server response including suggestions and per‑suggestion votes.
+     */
+    public static class RephraseResponse {
+        public List<String> suggestions;
+        public Map<String, Integer> votes;
+    }
+
+    /**
+     * POST /api/rephrase
+     *  • Builds enriched prompt (async)
+     *  • Calls OpenAIService
+     *  • Parses JSON array of suggestions
+     *  • Fetches latest vote for each suggestion for this user token
+     *  • Returns JSON { suggestions: [...], votes: { "...": 1, "...": -1, ... } }
+     */
     @POST
     @Path("/rephrase")
-    public Uni<RestResponse<String>> rephrase(InputRequest request) {
-        // Offload buildEnrichedPrompt (which performs DB access) to worker
-        return Uni.createFrom().item(request.prompt)
+    public Uni<RestResponse<RephraseResponse>> rephrase(InputRequest req) {
+        log.infof("Entered /api/rephrase: prompt='%s', token=%s, ua=%s, force=%b",
+                req.prompt, req.token, req.ua, req.force);
+
+        // ---- 1) Synchronous negative‐speech detection ----
+        String text = req.prompt == null ? "" : req.prompt.trim();
+        log.debugf("Trimmed prompt to '%s'", text);
+
+        if (!text.isEmpty() && Character.isLetterOrDigit(text.charAt(text.length() - 1))) {
+            text = text + ".";
+            log.debugf("Appended period to text, now '%s'", text);
+        }
+
+        SentenceExtractionResult extraction = detector.extractCompleteSentences(text);
+        List<String> sentences = extraction.getCompleteSentences();
+        log.infof("extractCompleteSentences returned %d sentences", sentences.size());
+
+        boolean hasNegative = sentences.stream().peek(sent -> {
+            boolean inj = detector.isInjunction(sent);
+            boolean conj = detector.hasConjunction(sent);
+            log.debugf("Sentence '%s' -> isInjunction=%b, hasConjunction=%b", sent, inj, conj);
+        }).anyMatch(sent -> detector.isInjunction(sent) || detector.hasConjunction(sent));
+
+        log.infof("Negative speech detected: %b", hasNegative);
+        if (!req.force && !hasNegative) {
+            log.info("No negative speech and force==false -> returning empty suggestions");
+            RephraseResponse empty = new RephraseResponse();
+            empty.suggestions = Collections.emptyList();
+            empty.votes       = Collections.emptyMap();
+            return Uni.createFrom().item(RestResponse.ok(empty));
+        }
+
+        // ---- 2) Async: build prompt, call OpenAI, and lookup votes ----
+        log.debug("Offloading prompt build and OpenAI call to worker thread");
+        return Uni.createFrom().item(req)
                 .runSubscriptionOn(Infrastructure.getDefaultExecutor())
-                .map(this::buildEnrichedPrompt)
-                .flatMap(enrichedPrompt -> openAIService.getResponse(enrichedPrompt))
-                .onItem().transform(response -> RestResponse.ok(response))
-                .onFailure().recoverWithItem(e -> RestResponse.status(
-                        RestResponse.Status.INTERNAL_SERVER_ERROR,
-                        e.getMessage()
-                ));
+                .map(r -> {
+                    log.debug("Building enriched prompt");
+                    return buildEnrichedPrompt(r.prompt);
+                })
+                .flatMap(enriched -> {
+                    log.info("Calling OpenAIService.getResponse");
+                    log.debugf("Enriched prompt: %s", enriched);
+                    return openAIService.getResponse(enriched);
+                })
+                .flatMap(rawJson -> Uni.createFrom().item(() -> {
+                            log.debugf("Received raw JSON from OpenAI: %s", rawJson);
+
+                            List<String> suggestions = parseJsonArray(rawJson);
+                            log.infof("Parsed %d suggestions", suggestions.size());
+
+                            Map<String,Integer> votesMap = suggestions.stream()
+                                    .collect(Collectors.toMap(
+                                            s -> s,
+                                            s -> {
+                                                VoteEntry ve = VoteEntry.<VoteEntry>find(
+                                                        "prompt = ?1 and suggestion = ?2 and token = ?3 order by timestamp desc",
+                                                        req.prompt, s, req.token
+                                                ).firstResult();
+                                                int v = ve != null ? ve.vote : 0;
+                                                log.debugf("Lookup vote for '%s' -> %d", s, v);
+                                                return v;
+                                            }
+                                    ));
+                            log.infof("Compiled votes map: %s", votesMap);
+
+                            RephraseResponse resp = new RephraseResponse();
+                            resp.suggestions = suggestions;
+                            resp.votes       = votesMap;
+                            log.info("Returning populated RephraseResponse");
+                            return RestResponse.ok(resp);
+                        })
+                        .runSubscriptionOn(Infrastructure.getDefaultExecutor()))
+                .onFailure().recoverWithItem(e -> {
+                    log.error("Error in /api/rephrase", e);
+                    return RestResponse.<RephraseResponse>status(
+                            RestResponse.Status.INTERNAL_SERVER_ERROR, null
+                    );
+                });
+    }
+
+
+    /**
+     * Helper: parse a JSON array-of-strings into a List<String>.
+     */
+    private List<String> parseJsonArray(String jsonArrayStr) {
+        try (JsonReader jr = Json.createReader(new StringReader(jsonArrayStr))) {
+            JsonArray arr = jr.readArray();
+            return arr.getValuesAs(JsonString.class)
+                    .stream()
+                    .map(JsonString::getString)
+                    .collect(Collectors.toList());
+        }
     }
 
     /**
@@ -103,5 +216,13 @@ public class OpenAPIController {
 
         return promptBuilder.toString();
     }
-}
 
+    /**
+     * Simple Pair helper (since Java lacks a built‑in tuple).
+     */
+    private static class Pair<A,B> {
+        final A first;
+        final B second;
+        Pair(A a, B b) { this.first = a; this.second = b; }
+    }
+}

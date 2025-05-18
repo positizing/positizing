@@ -6,7 +6,6 @@
 
     <!-- Quicksand 700 (bold) -->
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@700&display=swap" rel="stylesheet">
-
     <!-- Milligram for basic layout -->
     <link rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/milligram/1.4.1/milligram.min.css">
@@ -23,18 +22,51 @@
         /* --- demo area --- */
         textarea    { height:120px; }
         #resultCard { margin-top:2rem; }
-        .negSpan    { background:#fff9c4; padding:2px 4px; border-radius:3px; }
-        .suggestion { margin:0.4rem 0; padding:0.6rem; background:#f7f7f7;
-            border-left:4px solid #64b5f6; display:flex; align-items:center; }
+
+        /* “no negatives” message */
+        .no-results {
+            display:flex;
+            align-items:center;
+            color:#2e7d32; /* green */
+            font-weight:bold;
+            margin-bottom:1rem;
+        }
+        .no-results .icon {
+            margin-right:0.5rem;
+            font-size:1.5rem;
+        }
+        /* warning blurb */
+        .alert {
+            background:#fff3e0;
+            border-left:4px solid #ffa000;
+            padding:0.8rem;
+            margin-bottom:1rem;
+            font-weight:500;
+        }
+
+        /* suggestion blocks */
+        .suggestion {
+            margin:0.4rem 0;
+            padding:0.6rem;
+            background:#f7f7f7;
+            border-left:4px solid #64b5f6;
+            display:flex;
+            align-items:center;
+        }
         .suggestion span { flex:1; }
-        button.feedback { margin-left:0.5rem; cursor:pointer; }
-        /* highlight selected votes */
-        .feedback.selected { background-color: #64b5f6; color: white; }
+
+        /* feedback buttons use default Milligram .button */
+        button.feedback {
+            margin-left:0.5rem;
+        }
+        /* selected state: override to blue */
+        button.feedback.selected {
+            background-color:#64b5f6!important;
+            color:#fff!important;
+        }
     </style>
 </head>
-
 <body>
-<!-- Brand strip with logo + wordmark -->
 <div class="brandBar">
     <img src="img/positizing.png" alt="Positizing logo">
     <span class="brandTxt">POSITIZING</span>
@@ -44,100 +76,136 @@
 <h3>Positize your speech!</h3>
 <p>Enter a sentence (or two) below and click <em>Detect</em>.</p>
 
-<!-- Text input for user prompt -->
 <textarea id="input" placeholder="I don’t think you should do that."></textarea>
-<!-- Button to trigger API call -->
 <button id="detectBtn" class="button">Detect</button>
 
-<!-- Container for rendering suggestions -->
 <div id="resultCard"></div>
 
 <script>
-    // ===== Session Initialization =====
+    // ===== Session Token =====
     let token = localStorage.getItem('positizing_token');
     if (!token) {
         token = crypto.randomUUID();
         localStorage.setItem('positizing_token', token);
-        console.debug('Generated new session token:', token);
-    } else {
-        console.debug('Loaded existing session token:', token);
+    }
+    const ua = navigator.userAgent;
+
+    // ===== Persisted “force” state per prompt =====
+    const FORCED_KEY = 'positizing_forced_prompts';
+    const forcedPrompts = new Set(
+        JSON.parse(localStorage.getItem(FORCED_KEY) || '[]')
+    );
+    function saveForcedPrompts() {
+        localStorage.setItem(FORCED_KEY,
+            JSON.stringify(Array.from(forcedPrompts))
+        );
     }
 
-    const ua = navigator.userAgent;
-    console.debug('User agent:', ua);
-
-    // ===== DOM References =====
+    // ===== DOM Elements =====
     const inputEl    = document.getElementById('input');
     const detectBtn  = document.getElementById('detectBtn');
     const resultCard = document.getElementById('resultCard');
 
-    // Track per-suggestion votes: 1 = upvoted, -1 = downvoted, 0 = none
+    // state: suggestion -> vote (1, -1, or 0)
     const voteState = {};
 
-    // Event Listeners
-    detectBtn.addEventListener('click', runDetect);
+    // Events
+    detectBtn.addEventListener('click', () => runDetect(false));
     inputEl.addEventListener('keypress', e => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            runDetect();
+            runDetect(false);
         }
     });
 
     /**
-     * Call API and render suggestions
+     * runDetect(forceOverride):
+     *  • decides actual force = forceOverride || forcedPrompts.has(prompt)
+     *  • calls /api/rephrase with { prompt, token, ua, force }
      */
-    async function runDetect() {
+    async function runDetect(forceOverride) {
         const prompt = inputEl.value.trim();
-        console.debug('runDetect() with prompt:', prompt);
         if (!prompt) return;
         resultCard.innerHTML = '<p>Loading…</p>';
 
-        const payload = { prompt, token, ua };
-        console.debug('POST /api/rephrase', payload);
+        const actualForce = forceOverride || forcedPrompts.has(prompt);
+        console.debug('Detect with force=', actualForce);
 
+        // if user clicked “Show suggestions anyway”, persist it
+        if (forceOverride) {
+            forcedPrompts.add(prompt);
+            saveForcedPrompts();
+        }
+
+        const payload = { prompt, token, ua, force: actualForce };
         let res;
         try {
             res = await fetch('/api/rephrase', {
-                method: 'POST',
-                headers: { 'Content-Type':'application/json' },
-                body: JSON.stringify(payload)
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify(payload)
             });
-        } catch (err) {
-            console.error('Network error:', err);
-            resultCard.innerHTML = '<p>Network error. Try again.</p>';
+        } catch {
+            resultCard.innerHTML = '<p>Network error.</p>';
             return;
         }
-
         if (!res.ok) {
-            console.error('API error:', res.status, res.statusText);
-            resultCard.innerHTML = `<p>Error ${res.status}: ${res.statusText}</p>`;
+            resultCard.innerHTML = `<p>Error ${res.status}</p>`;
             return;
         }
 
-        let data;
-        try {
-            data = await res.json();
-        } catch (err) {
-            console.error('Parsing error:', err);
-            resultCard.innerHTML = '<p>Invalid response.</p>';
-            return;
+        const data = await res.json();
+        const suggestions = Array.isArray(data.suggestions)
+            ? data.suggestions
+            : data.response
+                ? [data.response]
+                : [];
+
+        // hydrate voteState & filter out down-votes
+        const votes = data.votes || {};
+        const filtered = suggestions.filter(s => {
+            voteState[s] = votes[s] || 0;
+            return voteState[s] !== -1;
+        });
+
+        resultCard.innerHTML = '';
+        if (filtered.length === 0 && !actualForce) {
+            renderNoResults();
+        } else {
+            if (filtered.length > 0 && !actualForce) {
+                renderWarning();
+            }
+            renderResults(prompt, filtered);
         }
-        console.debug('API response:', data);
-
-        let suggestions = [];
-        if (Array.isArray(data)) suggestions = data;
-        else if (data.suggestions) suggestions = data.suggestions;
-        else if (data.response) suggestions = [data.response];
-        console.debug('Suggestions to render:', suggestions);
-
-        renderResults(prompt, suggestions);
     }
 
-    /**
-     * Render each suggestion with toggling vote buttons
-     */
+    /** “No negatives” view with green checkmark + force button */
+    function renderNoResults() {
+        const nores = document.createElement('div');
+        nores.className = 'no-results';
+        nores.innerHTML =
+            `<span class="icon">✓</span>` +
+            `<span>No negative speech detected.</span>`;
+        resultCard.appendChild(nores);
+
+        const btn = document.createElement('button');
+        btn.className = 'button';
+        btn.textContent = 'Show suggestions anyway';
+        btn.addEventListener('click', () => runDetect(true));
+        resultCard.appendChild(btn);
+    }
+
+    /** Warning when negatives detected **/
+    function renderWarning() {
+        const alert = document.createElement('div');
+        alert.className = 'alert';
+        alert.textContent =
+            'Negative language was detected; here are some positive alternatives:';
+        resultCard.appendChild(alert);
+    }
+
+    /** Render suggestion blocks with vote buttons **/
     function renderResults(prompt, suggestions) {
-        resultCard.innerHTML = '';
         suggestions.forEach(text => {
             const div = document.createElement('div');
             div.className = 'suggestion';
@@ -146,67 +214,44 @@
             span.textContent = text;
             div.appendChild(span);
 
-            // Create buttons
-            const upBtn = document.createElement('button');
-            upBtn.className = 'feedback';
-            upBtn.textContent = '👍';
-            upBtn.title = 'Upvote';
-
-            const downBtn = document.createElement('button');
-            downBtn.className = 'feedback';
-            downBtn.textContent = '👎';
-            downBtn.title = 'Downvote';
-
-            // Initialize state
+            const upBtn   = createBtn('👍', 'Upvote',   () => handleVote(prompt, text,  1, upBtn, downBtn));
+            const downBtn = createBtn('👎', 'Downvote', () => handleVote(prompt, text, -1, upBtn, downBtn));
             updateButtonStyles(text, upBtn, downBtn);
-
-            // Attach vote handlers
-            upBtn.addEventListener('click', () => handleVote(prompt, text, 1, upBtn, downBtn));
-            downBtn.addEventListener('click', () => handleVote(prompt, text, -1, upBtn, downBtn));
 
             div.appendChild(upBtn);
             div.appendChild(downBtn);
             resultCard.appendChild(div);
+
+            function createBtn(emoji, title, onClick) {
+                const b = document.createElement('button');
+                b.classList.add('feedback','button');
+                b.textContent = emoji;
+                b.title = title;
+                b.addEventListener('click', onClick);
+                return b;
+            }
         });
     }
 
-    /**
-     * Toggle vote state and send update
-     */
+    /** Toggle vote and POST to server **/
     function handleVote(prompt, suggestion, voteValue, upBtn, downBtn) {
         const current = voteState[suggestion] || 0;
         const newVote = current === voteValue ? 0 : voteValue;
         voteState[suggestion] = newVote;
-        console.debug('Vote for', suggestion, '->', newVote);
         updateButtonStyles(suggestion, upBtn, downBtn);
-        sendFeedback(prompt, suggestion, newVote);
+
+        fetch('/cache/vote', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({ prompt, suggestion, vote:newVote, token, ua })
+        });
     }
 
-    /**
-     * Reflect vote state in button styles
-     */
+    /** Update button visuals based on voteState **/
     function updateButtonStyles(suggestion, upBtn, downBtn) {
         const state = voteState[suggestion] || 0;
-        upBtn.classList.toggle('selected', state === 1);
+        upBtn.classList.toggle('selected',   state === 1);
         downBtn.classList.toggle('selected', state === -1);
-    }
-
-    /**
-     * POST vote (or unvote) to server
-     */
-    async function sendFeedback(prompt, suggestion, vote) {
-        const payload = { prompt, suggestion, vote, token, ua };
-        console.debug('POST /cache/vote', payload);
-        try {
-            const res = await fetch('/cache/vote', {
-                method: 'POST',
-                headers: { 'Content-Type':'application/json' },
-                body: JSON.stringify(payload)
-            });
-            console.debug('Vote response:', res.status);
-        } catch (err) {
-            console.error('Feedback error:', err);
-        }
     }
 </script>
 </body>
