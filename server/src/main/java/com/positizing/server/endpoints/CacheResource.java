@@ -1,12 +1,7 @@
-package com.positizing.server;
+package com.positizing.server.endpoints;
 
-/// CacheResource:
-///
-///
-/// Created by James X. Nelson (James@WeTheInter.net) on 17/05/2025 @ 20:13
-package com.positizing.server;
-
-import io.smallrye.mutiny.Uni;
+import com.positizing.server.OpenAPIService;
+import com.positizing.server.data.CacheEntry;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -21,14 +16,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-/**
- * CacheResource
- *
- * <p>Responsibilities:
- * - Expose in‑memory cache entries
- * - Expose persistent DB cache entries
- * - Return JSON payloads for UI or debugging
- */
+/// CacheResource:
+///
+/// Responsibilities:
+/// - Expose in‑memory cache entries
+/// - Expose persistent DB cache entries
+/// - Return JSON payloads for UI or debugging
+///
+/// Created by James X. Nelson (James@WeTheInter.net) on 17/05/2025 @ 20:13
 @Path("/cache")
 @ApplicationScoped
 public class CacheResource {

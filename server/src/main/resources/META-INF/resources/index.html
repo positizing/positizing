@@ -25,7 +25,9 @@
         #resultCard { margin-top:2rem; }
         .negSpan    { background:#fff9c4; padding:2px 4px; border-radius:3px; }
         .suggestion { margin:0.4rem 0; padding:0.6rem; background:#f7f7f7;
-            border-left:4px solid #64b5f6; }
+            border-left:4px solid #64b5f6; display:flex; align-items:center; }
+        .suggestion span { flex:1; }
+        button.feedback { margin-left:0.5rem; cursor:pointer; }
     </style>
 </head>
 
@@ -37,15 +39,172 @@
     <img src="img/positizing.png" alt="Positizing logo">
 </div>
 
-<!-- rest of the page unchanged -->
 <h3>Positize your speech!</h3>
 <p>Enter a sentence (or two) below and click <em>Detect</em>.</p>
 
+<!-- Text input for user prompt -->
 <textarea id="input" placeholder="I don’t think you should do that."></textarea>
+<!-- Button to trigger API call -->
 <button id="detectBtn" class="button">Detect</button>
 
+<!-- Container for rendering suggestions -->
 <div id="resultCard"></div>
 
-<script src="main.js"></script>
+<script>
+    // ===== Session Initialization =====
+    // Retrieve or generate a unique token for this user session
+    let token = localStorage.getItem('positizing_token');
+    if (!token) {
+        token = crypto.randomUUID();
+        localStorage.setItem('positizing_token', token);
+        console.debug('Generated new session token:', token);
+    } else {
+        console.debug('Loaded existing session token:', token);
+    }
+
+    // Capture the browser user-agent for logging and debugging
+    const ua = navigator.userAgent;
+    console.debug('User agent:', ua);
+
+    // ===== DOM Element References =====
+    const inputEl    = document.getElementById('input');
+    const detectBtn  = document.getElementById('detectBtn');
+    const resultCard = document.getElementById('resultCard');
+
+    // ===== Event Listeners =====
+    // Click handler for Detect button
+    detectBtn.addEventListener('click', runDetect);
+    // Allow Enter key to also trigger detection
+    inputEl.addEventListener('keypress', e => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            runDetect();
+        }
+    });
+
+    /**
+     * runDetect(): Fetch positive-language suggestions from the API
+     */
+    async function runDetect() {
+        const prompt = inputEl.value.trim();
+        console.debug('runDetect() called with prompt:', prompt);
+        if (!prompt) {
+            console.warn('Empty prompt, aborting API call');
+            return;
+        }
+
+        // Show loading state
+        resultCard.innerHTML = '<p>Loading&hellip;</p>';
+
+        // Build request payload
+        const payload = { prompt, token, ua };
+        console.debug('Sending /api/rephrase payload:', payload);
+
+        // Call the rephrase API
+        let res;
+        try {
+            res = await fetch('/api/rephrase', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } catch (networkErr) {
+            console.error('Network error calling /api/rephrase:', networkErr);
+            resultCard.innerHTML = '<p>Network error. Please try again.</p>';
+            return;
+        }
+
+        if (!res.ok) {
+            console.error('API returned non-OK status:', res.status, res.statusText);
+            resultCard.innerHTML = `<p>Error: ${res.status} ${res.statusText}</p>`;
+            return;
+        }
+
+        // Parse JSON response
+        let data;
+        try {
+            data = await res.json();
+        } catch (parseErr) {
+            console.error('Error parsing JSON response:', parseErr);
+            resultCard.innerHTML = '<p>Invalid server response.</p>';
+            return;
+        }
+        console.debug('API response data:', data);
+
+        // Extract suggestions array (handle multiple formats)
+        const suggestions = data.suggestions ||
+            (Array.isArray(data) ? data : []) ||
+            (data.response ? [data.response] : []);
+        console.debug('Parsed suggestions:', suggestions);
+
+        // Render the suggestion list
+        renderResults(prompt, suggestions);
+    }
+
+    /**
+     * renderResults(): Display each suggestion with feedback controls
+     * @param {string} prompt - original user prompt
+     * @param {string[]} suggestions - array of suggestion strings
+     */
+    function renderResults(prompt, suggestions) {
+        // Clear any existing results
+        resultCard.innerHTML = '';
+
+        // Iterate over suggestions and build elements
+        suggestions.forEach(text => {
+            console.debug('Rendering suggestion:', text);
+            const div = document.createElement('div');
+            div.className = 'suggestion';
+
+            // Suggestion text node
+            const span = document.createElement('span');
+            span.textContent = text;
+            div.appendChild(span);
+
+            // Thumbs-up / thumbs-down buttons
+            ['up','down'].forEach(dir => {
+                const btn = document.createElement('button');
+                btn.className = 'feedback';
+                btn.textContent = dir === 'up' ? '👍' : '👎';
+                btn.title = dir === 'up' ? 'Upvote suggestion' : 'Downvote suggestion';
+                btn.onclick = () => sendFeedback(prompt, text, dir === 'up' ? 1 : -1);
+                div.appendChild(btn);
+            });
+
+            // Append suggestion block
+            resultCard.appendChild(div);
+        });
+    }
+
+    /**
+     * sendFeedback(): Record user vote for a suggestion
+     * @param {string} prompt - original user prompt
+     * @param {string} suggestion - the suggestion text
+     * @param {number} vote - 1 for upvote, -1 for downvote
+     */
+    async function sendFeedback(prompt, suggestion, vote) {
+        const feedbackPayload = { prompt, suggestion, vote, token, ua };
+        console.debug('Sending feedback:', feedbackPayload);
+        try {
+            const fbRes = await fetch('/cache/vote', {
+                method: 'POST',
+                headers: { 'Content-Type':'application/json' },
+                body: JSON.stringify(feedbackPayload)
+            });
+            console.debug('Feedback response status:', fbRes.status);
+        } catch (err) {
+            console.error('Feedback error', err);
+        }
+    }
+
+    // ===== Periodic Tasks =====
+    // Flush in-memory cache to disk every 5 minutes to persist votes and cache
+    setInterval(() => {
+        console.debug('Flushing in-memory cache to disk via /cache/flush');
+        fetch('/cache/flush')
+            .then(res => console.debug('Flush response status:', res.status))
+            .catch(err => console.error('Flush error', err));
+    }, 300_000);
+</script>
 </body>
 </html>

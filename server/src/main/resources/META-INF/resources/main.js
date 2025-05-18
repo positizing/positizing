@@ -1,119 +1,104 @@
-(function () {
-    /* ------------------------------------------------------------------ *
-     *  Element handles
-     * ------------------------------------------------------------------ */
-    var $input = document.getElementById('input');
-    var $btn   = document.getElementById('detectBtn');
-    var $card  = document.getElementById('resultCard');
+// main.js — handles user input, API calls, and feedback
 
-    /* -- helpers -------------------------------------------------------- */
-    function clear(el) { el.innerHTML = ''; }
+// generate or retrieve unique session token
+let token = localStorage.getItem('positizing_token');
+if (!token) {
+    token = crypto.randomUUID();
+    localStorage.setItem('positizing_token', token);
+}
 
-    function badge(text, color) {
-        var span = document.createElement('span');
-        span.style.fontWeight = '600';
-        span.style.color      = color;
-        span.textContent      = text;
-        return span;
-    }
+// capture user agent
+const ua = navigator.userAgent;
 
-    function buildList(items) {
-        var ul = document.createElement('ul');
-        items.forEach(function (t) {
-            var li = document.createElement('li');
-            li.textContent = t;
-            ul.appendChild(li);
-        });
-        return ul;
-    }
+// DOM elements
+const inputEl    = document.getElementById('input');
+const detectBtn  = document.getElementById('detectBtn');
+const resultCard = document.getElementById('resultCard');
 
-    /* ------------------------------------------------------------------ *
-     *  Main action
-     * ------------------------------------------------------------------ */
-    $btn.addEventListener('click', function () {
-        clear($card);
+// hook button and Enter key
+detectBtn.addEventListener('click', runDetect);
+inputEl.addEventListener('keypress', e => { if (e.key === 'Enter') runDetect(); });
 
-        var text = $input.value.trim();
-        if (!text) { alert('Enter some text first'); return; }
+/**
+ * Send the user text to the rephrase API and render results
+ */
+async function runDetect() {
+    const prompt = inputEl.value.trim();
+    if (!prompt) return;
 
-        // Ensure at least one terminal punctuation mark
-        if (!/[.!?]\s*$/.test(text)) { text += '.'; }
+    // show loading state
+    resultCard.innerHTML = '<p>Loading&hellip;</p>';
 
-        $card.textContent = '… contacting API …';
-
-        // ---- 1) DETECT ----------------------------------------------
-        fetch('/api/detect', {
-            method : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body   : JSON.stringify({ text: text })
-        })
-            .then(function (r) { return r.ok ? r.json() : Promise.reject(r.text()); })
-            .then(function (detect) {
-
-                if (!detect.needsReplacement) {
-                    clear($card);
-                    $card.appendChild(badge('No negative language detected ✔', '#2e7d32'));
-                    return;
-                }
-
-                // ---- 2) REPHRASE -----------------------------------------
-                return fetch('/api/rephrase', {
-                    method : 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body   : JSON.stringify({ userInput: text })
-                })
-                    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.text()); })
-                    .then(function (suggestions) {
-                        render(detect, suggestions);
-                    });
-
-            })
-            .catch(function (err) {
-                clear($card);
-                $card.appendChild(badge('Error contacting API', '#c62828'));
-                if (err.then) err.then(console.error);   // if response body
-                else console.error(err);
-            });
+    // call your backend
+    const res = await fetch('/api/rephrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, token, ua })
     });
 
-    /* ------------------------------------------------------------------ *
-     *  Render results
-     * ------------------------------------------------------------------ */
-    function render(detection, suggestions) {
-        clear($card);
-
-        /* 1. heading + highlighted sentence --------------------------- */
-        var h4 = document.createElement('h4');
-        h4.textContent = 'We spotted negative language';
-        $card.appendChild(h4);
-
-        var p = document.createElement('p');
-        var span = detection.negativeSpans[0];
-        p.innerHTML = 'Highlighted phrase: ' +
-            '<mark>' + span.text + '</mark>';
-        $card.appendChild(p);
-
-        /* 2. suggestions in bullet list ------------------------------ */
-        var h5 = document.createElement('h5');
-        h5.textContent = 'Here are some suggestions:';
-        $card.appendChild(h5);
-
-        $card.appendChild(buildList(suggestions));
-
-        /* 3. collapsible raw JSON (dev) ------------------------------ */
-        var details = document.createElement('details');
-        var summary = document.createElement('summary');
-        summary.textContent = 'Raw JSON (debug)';
-        details.appendChild(summary);
-
-        var pre = document.createElement('pre');
-        pre.style.background = '#fafafa';
-        pre.style.padding    = '0.8rem';
-        pre.style.overflow   = 'auto';
-        pre.textContent      = JSON.stringify(
-            { detection: detection, suggestions: suggestions }, null, 2);
-        details.appendChild(pre);
-
-        $card.appendChild(details);
+    if (!res.ok) {
+        resultCard.innerHTML = '<p>Error fetching suggestions.</p>';
+        return;
     }
-})();
+
+    const data = await res.json();
+    // handle top‑level array or object response
+    let suggestions;
+    if (Array.isArray(data)) {
+        suggestions = data;
+    } else if (data.suggestions && Array.isArray(data.suggestions)) {
+        suggestions = data.suggestions;
+    } else if (typeof data.response === 'string') {
+        suggestions = [data.response];
+    } else {
+        suggestions = [];
+    }
+
+    renderResults(prompt, suggestions);
+}
+
+/**
+ * Render each suggestion with feedback buttons
+ */
+function renderResults(prompt, suggestions) {
+    resultCard.innerHTML = '';
+
+    suggestions.forEach(text => {
+        const div = document.createElement('div');
+        div.className = 'suggestion';
+
+        const span = document.createElement('span');
+        span.textContent = text || '';
+        div.appendChild(span);
+
+        ['up', 'down'].forEach(dir => {
+            const btn = document.createElement('button');
+            btn.className = 'feedback';
+            btn.textContent = dir === 'up' ? '👍' : '👎';
+            btn.addEventListener('click', () => sendFeedback(prompt, text, dir === 'up' ? 1 : -1));
+            div.appendChild(btn);
+        });
+
+        resultCard.appendChild(div);
+    });
+}
+
+/**
+ * POST a vote to /cache/vote
+ */
+async function sendFeedback(prompt, suggestion, vote) {
+    try {
+        await fetch('/cache/vote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, suggestion, vote, token, ua })
+        });
+    } catch (err) {
+        console.error('Feedback error', err);
+    }
+}
+
+// periodically flush in-memory cache to disk (every 5 minutes)
+setInterval(() => {
+    fetch('/cache/flush').catch(console.error);
+}, 300_000);
