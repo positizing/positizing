@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Positizing • Positive‑Language API Demo</title>
+
+    <!-- Quicksand 700 (bold) -->
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@700&display=swap" rel="stylesheet">
+
+    <!-- Milligram for basic layout -->
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/milligram/1.4.1/milligram.min.css">
+
+    <style>
+        body        { max-width:800px; margin:3rem auto; }
+        /* --- brand strip --- */
+        .brandBar   { display:flex; align-items:center; gap:1rem;
+            justify-content:center; margin-bottom:2rem; }
+        .brandBar img       { width:100px; }
+        .brandBar .brandTxt { font-family:'Quicksand', sans-serif;
+            font-size:10rem; font-weight:700;
+            color:#333; }
+        /* --- demo area --- */
+        textarea    { height:120px; }
+        #resultCard { margin-top:2rem; }
+        .negSpan    { background:#fff9c4; padding:2px 4px; border-radius:3px; }
+        .suggestion { margin:0.4rem 0; padding:0.6rem; background:#f7f7f7;
+            border-left:4px solid #64b5f6; }
+    </style>
+</head>
+
+<body>
+<!-- Brand strip with logo + wordmark -->
+<div class="brandBar">
+    <img src="img/positizing.png" alt="Positizing logo">
+    <span class="brandTxt">POSITIZING</span>
+    <img src="img/positizing.png" alt="Positizing logo">
+</div>
+
+<!-- rest of the page unchanged -->
+<h3>Positize your speech!</h3>
+<p>Enter a sentence (or two) below and click <em>Detect</em>.</p>
+
+<textarea id="input" placeholder="I don’t think you should do that."></textarea>
+<button id="detectBtn" class="button">Detect</button>
+
+<div id="resultCard"></div>
+
+<script src="main.js"></script>
+</body>
+</html>

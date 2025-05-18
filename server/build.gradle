@@ -8,6 +8,7 @@ repositories {
 }
 
 dependencies {
+    implementation project(':detector')
     implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
     implementation 'io.quarkiverse.jdbc:quarkus-jdbc-sqlite:3.0.6'
 

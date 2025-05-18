@@ -13,26 +13,29 @@ pluginManagement {
 rootProject.name = 'positizing'
 
 List<String> modules = [
-        ':detector', ':android', ':watch', ':phone', ':server'
+        'detector', 'android', 'watch', 'phone', 'server'
 ]
 modules.each { m ->
     include m
-    ProjectDescriptor p = project(m)
-    int dash = m.indexOf('-')
-    if (dash == -1) {
-        File namedBuildscript = new File(p.projectDir, "${m - ':'}.gradle")
+    ProjectDescriptor p = project(":$m")
+    File namedBuildscript = new File(p.projectDir, "${m}.gradle")
+    if (namedBuildscript.exists()) {
+        p.buildFileName = namedBuildscript.name
+    }
+}
+
+List<String> pluginModules = [
+        'plugin-tools', 'google-docs'
+]
+pluginModules.each { m ->
+    include m
+    ProjectDescriptor p = project(":$m")
+        File dir = file("plugins/$m")
+        File namedBuildscript = new File(dir, "${m}.gradle")
         if (namedBuildscript.exists()) {
             p.buildFileName = namedBuildscript.name
         }
-    } else {
-        String base = m.substring(1, dash)
-        String type = m.substring(dash + 1)
-        File dir = file("$base/$type")
-        if (dir.exists()) {
-            p.projectDir = dir
-            p.buildFileName = "$base-${type}.gradle"
-        }
-    }
+        p.projectDir = dir
 }
 
 dependencyResolutionManagement {

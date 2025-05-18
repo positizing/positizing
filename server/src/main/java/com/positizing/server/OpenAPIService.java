@@ -2,7 +2,6 @@ package com.positizing.server;
 
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
-import io.smallrye.mutiny.vertx.UniHelper;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -12,8 +11,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import java.time.Duration;
-import java.time.temporal.ChronoUnit;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -121,5 +119,12 @@ public class OpenAPIService {
             future.onSuccess(emitter::complete)
                     .onFailure(emitter::fail);
         });
+    }
+
+    /**
+     * For inspection only — do not modify the returned map!
+     */
+    public Map<String, String> getInMemoryCache() {
+        return inMemoryCache;
     }
 }
