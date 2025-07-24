@@ -1,0 +1,36 @@
+import org.gradle.api.tasks.bundling.Zip
+
+// --------------------------------------------------
+// 1) Package the Chrome extension into a zip archive
+// --------------------------------------------------
+tasks.register("packageChromeExtension", Zip) {
+    group = "chrome"
+    description = "Package the Chrome extension into a zip file for distribution."
+    from("$rootDir/chrome-extension")
+    exclude('build', 'out')
+    archiveFileName.set("positizing-chrome-extension.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+}
+
+// ------------------------------------------------------------------
+// 2) Deploy to Chrome Web Store (requires webstore CLI & env‑vars)
+// ------------------------------------------------------------------
+tasks.register("deployChromeExtension") {
+    group = "chrome"
+    description = "Deploy the Chrome extension to the Chrome Web Store."
+    dependsOn("packageChromeExtension")
+    doLast {
+        def zipPath = "${buildDir}/distributions/positizing-chrome-extension.zip"
+        println "Uploading extension from $zipPath…"
+        exec {
+            // Uses the `webstore` CLI: https://github.com/GoogleChrome/webstore
+            commandLine "webstore", "upload",
+                    "--source",      zipPath,
+                    "--extension-id", project.findProperty("chromeExtensionId") ?: 'epnflfhleofljcmpjiohljpdmnefiolj',//project.provider({throw new GradleException("Must set -PchromeExtensionId")}),
+                    "--client-id",      System.getenv("CHROME_WEBSTORE_CLIENT_ID"),
+                    "--client-secret",  System.getenv("CHROME_WEBSTORE_CLIENT_SECRET"),
+                    "--refresh-token",  System.getenv("CHROME_WEBSTORE_REFRESH_TOKEN")
+        }
+        println "✅ Extension deployed."
+    }
+}

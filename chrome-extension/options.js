@@ -1,19 +1,18 @@
-// options.js
 document.addEventListener('DOMContentLoaded', () => {
     const enabledBox = document.getElementById('enabled');
     const apiUrlInput = document.getElementById('apiUrl');
+    const tokenInput  = document.getElementById('token');
 
-    // Load saved settings
-    chrome.storage.sync.get({ enabled: true, apiUrl: '' }, prefs => {
-        enabledBox.checked = prefs.enabled;
-        apiUrlInput.value = prefs.apiUrl;
-    });
+    chrome.storage.sync.get(
+        { enabled: true, apiUrl: '', token: '' },
+        prefs => {
+            enabledBox.checked  = prefs.enabled;
+            apiUrlInput.value   = prefs.apiUrl;
+            tokenInput.value    = prefs.token;
+        }
+    );
 
-    // Save on change
-    enabledBox.addEventListener('change', () => {
-        chrome.storage.sync.set({ enabled: enabledBox.checked });
-    });
-    apiUrlInput.addEventListener('input', () => {
-        chrome.storage.sync.set({ apiUrl: apiUrlInput.value });
-    });
+    enabledBox.onchange = () => chrome.storage.sync.set({ enabled: enabledBox.checked });
+    apiUrlInput.oninput  = () => chrome.storage.sync.set({ apiUrl: apiUrlInput.value });
+    tokenInput.oninput   = () => chrome.storage.sync.set({ token: tokenInput.value });
 });
