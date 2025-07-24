@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Positizing Assistant",
+  "version": "0.1.0",
+  "description": "Detect negative speech and suggest positive rephrasings via the Positizing API.",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": [
+    "https://positizing.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["contentScript.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html",
+  "icons": {
+    "16":  "icons/icon16.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
