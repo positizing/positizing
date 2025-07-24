@@ -17,9 +17,12 @@ import java.util.List;
 
 public class NegativeSpeechRephraser {
 
-    // Erase this API_KEY before checking in code
-    private static final String API_KEY = "nokeyhere";
-
+    private static final String API_KEY = System.getProperty("OPENAPI_KEY", System.getenv("OPENAPI_KEY"));
+    static {
+        if (API_KEY == null) {
+            throw new IllegalStateException("Missing required property OPENAPI_KEY. Set this environment variable to your openapi API key");
+        }
+    }
 
     //    private static final String API_URL = "https://api.openai.com/v1/completions";
     private static final String API_URL = "https://api.openai.com/v1/chat/completions";
