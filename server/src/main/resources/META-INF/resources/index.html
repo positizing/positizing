@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Positizing • Positive‑Language API Demo</title>
 
     <!-- Quicksand 700 (bold) -->
@@ -11,21 +12,49 @@
           href="https://cdnjs.cloudflare.com/ajax/libs/milligram/1.4.1/milligram.min.css">
 
     <style>
-        body        { max-width:800px; margin:3rem auto; }
+        body {
+            max-width:800px;
+            margin:3rem auto;
+            padding: 0 1rem;
+        }
         /* --- brand strip --- */
-        .brandBar   { display:flex; align-items:center; gap:1rem;
-            justify-content:center; margin-bottom:2rem; }
-        .brandBar img       { width:100px; }
-        .brandBar .brandTxt { font-family:'Quicksand', sans-serif;
-            font-size:10rem; font-weight:700;
-            color:#333; }
+        .brandBar {
+            display:flex;
+            flex-wrap: wrap;
+            align-items:center;
+            gap:1rem;
+            justify-content:center;
+            margin-bottom:2rem;
+        }
+        .brandBar img {
+            width:100px;
+            flex: 0 0 auto;
+        }
+        .brandBar .brandTxt {
+            font-family:'Quicksand', sans-serif;
+            font-size:10rem;
+            font-weight:700;
+            color:#333;
+            line-height:1;
+            flex: 1 1 auto;
+            text-align: center;
+            min-width: 0;
+        }
+
         /* --- demo area --- */
-        textarea    { height:120px; }
-        #resultCard { margin-top:2rem; }
+        textarea {
+            width: 100%;
+            height:120px;
+        }
+        #resultCard {
+            margin-top:2rem;
+            width: 100%;
+        }
 
         /* “no negatives” message */
         .no-results {
             display:flex;
+            flex-wrap: wrap;
             align-items:center;
             color:#2e7d32; /* green */
             font-weight:bold;
@@ -46,23 +75,58 @@
 
         /* suggestion blocks */
         .suggestion {
+            display:flex;
+            flex-wrap: wrap;
+            align-items:center;
             margin:0.4rem 0;
             padding:0.6rem;
             background:#f7f7f7;
             border-left:4px solid #64b5f6;
-            display:flex;
-            align-items:center;
+            width: 100%;
         }
-        .suggestion span { flex:1; }
+        .suggestion span {
+            flex:1 1 auto;
+            min-width: 0;
+            word-break: break-word;
+        }
 
         /* feedback buttons use default Milligram .button */
         button.feedback {
             margin-left:0.5rem;
+            flex: 0 0 auto;
         }
         /* selected state: override to blue */
         button.feedback.selected {
             background-color:#64b5f6!important;
             color:#fff!important;
+        }
+
+        /* ==== Mobile adjustments ==== */
+        @media (max-width: 600px) {
+            .brandBar .brandTxt {
+                font-size:4rem;
+            }
+            .brandBar img {
+                width:60px;
+            }
+            .suggestion {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .suggestion span {
+                margin-bottom: 0.5rem;
+            }
+            button.feedback {
+                margin-left: 0;
+                margin-right: 0.5rem;
+                margin-top: 0.3rem;
+            }
+            .no-results {
+                font-size: 1rem;
+            }
+            .no-results .icon {
+                font-size: 1.2rem;
+            }
         }
     </style>
 </head>
@@ -129,9 +193,6 @@
         resultCard.innerHTML = '<p>Loading…</p>';
 
         const actualForce = forceOverride || forcedPrompts.has(prompt);
-        console.debug('Detect with force=', actualForce);
-
-        // if user clicked “Show suggestions anyway”, persist it
         if (forceOverride) {
             forcedPrompts.add(prompt);
             saveForcedPrompts();
@@ -200,7 +261,7 @@
         const alert = document.createElement('div');
         alert.className = 'alert';
         alert.textContent =
-            'Negative language was detected; here are some positive alternatives:';
+            'Negative language detected; here are some positive alternatives:';
         resultCard.appendChild(alert);
     }
 

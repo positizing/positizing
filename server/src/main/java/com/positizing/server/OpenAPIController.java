@@ -55,6 +55,7 @@ public class OpenAPIController {
      * Server response including suggestions and per‑suggestion votes.
      */
     public static class RephraseResponse {
+        public String errorMessage;
         public List<String> suggestions;
         public Map<String, Integer> votes;
     }
@@ -116,8 +117,22 @@ public class OpenAPIController {
                 })
                 .flatMap(rawJson -> Uni.createFrom().item(() -> {
                             log.debugf("Received raw JSON from OpenAI: %s", rawJson);
+                            final String raw;
+                            int start = rawJson.indexOf('[');
+                            int end = rawJson.lastIndexOf(']');
+                            RephraseResponse resp = new RephraseResponse();
+                            if (start >= 0 && end >= 0 && end > start) {
+                                raw = rawJson.substring(start, end + 1);
+                            } else {
+                                log.warnf("No valid JSON array found in response: %s", rawJson);
+                                resp.votes = Collections.emptyMap();
+                                resp.suggestions = Collections.emptyList();
+                                resp.errorMessage = "Received invalid response from server. Please try a different suggestion!";
+                                // TODO: consider purging cache for this input, to help it recover.
+                                return RestResponse.status(RestResponse.Status.INTERNAL_SERVER_ERROR, resp);
+                            }
 
-                            List<String> suggestions = parseJsonArray(rawJson);
+                            List<String> suggestions = parseJsonArray(raw);
                             log.infof("Parsed %d suggestions", suggestions.size());
 
                             Map<String,Integer> votesMap = suggestions.stream()
@@ -134,8 +149,6 @@ public class OpenAPIController {
                                             }
                                     ));
                             log.infof("Compiled votes map: %s", votesMap);
-
-                            RephraseResponse resp = new RephraseResponse();
                             resp.suggestions = suggestions;
                             resp.votes       = votesMap;
                             log.info("Returning populated RephraseResponse");
@@ -161,6 +174,9 @@ public class OpenAPIController {
                     .stream()
                     .map(JsonString::getString)
                     .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.errorf("Failed to parse OpenAI JSON response: %s", jsonArrayStr);
+            throw e;
         }
     }
 
@@ -178,15 +194,20 @@ public class OpenAPIController {
                 .collect(Collectors.groupingBy(v -> v.suggestion,
                         Collectors.summingLong(v -> v.vote)));
 
-        // Separate into upvoted and downvoted lists
+        // Top 7 upvoted suggestions (highest score first)
         List<String> upvoted = scores.entrySet().stream()
                 .filter(e -> e.getValue() > 0)
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                 .map(Map.Entry::getKey)
+                .limit(7)
                 .collect(Collectors.toList());
 
+        // Top 7 downvoted suggestions (lowest score first)
         List<String> downvoted = scores.entrySet().stream()
                 .filter(e -> e.getValue() < 0)
+                .sorted(Map.Entry.comparingByValue())  // natural order (lowest to highest)
                 .map(Map.Entry::getKey)
+                .limit(7)
                 .collect(Collectors.toList());
 
         // Base prompt with guidelines (including misspelling correction)
